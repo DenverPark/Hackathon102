@@ -14,3 +14,6 @@ test('analysis sends exact RPC contract',async()=>{const {client,calls}=setup({s
 test('shrinkage sends numeric arguments',async()=>{const {client,calls}=setup(5);assert.equal(await client.calculateShrinkage(30,28.5),5);assert.deepEqual(JSON.parse(calls[0].options.body),{before_length:30,after_length:28.5});});
 test('validation errors preserve status and SQL code',async()=>{const {client}=setup({message:'Select 2-5 fabric samples',code:'22023'},400);await assert.rejects(client.analyze({}),e=>e.status===400&&e.code==='22023');});
 test('out-of-scope APIs are absent',()=>{const {client}=setup();for(const k of ['chat','getGuide','createProject','saveAnalysis','saveTestResult'])assert.equal(client[k],undefined);});
+
+test('scored analysis uses server RPC without client scoring',async()=>{const {client,calls}=setup({compatibility:{score:25}});const payload={purpose:'가방',items:[{fabric_id:'a'},{fabric_id:'b'}]};const r=await client.analyzeScored(payload);assert.equal(r.compatibility.score,25);assert.equal(new URL(calls[0].url).pathname,'/rest/v1/rpc/lm_analyze_scored');assert.deepEqual(JSON.parse(calls[0].options.body),{payload});});
+test('scored RPC preserves invalid-input errors',async()=>{const {client}=setup({message:'Invalid measurement conditions',code:'22023'},400);await assert.rejects(client.analyzeScored({}),e=>e.status===400&&e.code==='22023');});

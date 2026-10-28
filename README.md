@@ -44,6 +44,19 @@ npm run test:live
 
 `backend/data/nylon-wool.json`에 조사자료의 프로필2개·출처8개·근거13개를 보관합니다. 원본 PDF는 변경하거나 저장소에 업로드하지 않았습니다. 현재 전체 카탈로그는 원단4개·출처15개·근거23개입니다. 검토 내역은 `backend/NYLON_WOOL_REVIEW.md`, 실제 배포 내역은 `backend/DEPLOYMENT.md`에 있습니다.
 
-기존 프로젝트 업데이트: `backend/updates/nylon-wool-data.sql` 다음 `backend/updates/nylon-wool-analysis.sql` 순서입니다. 기존 테이블을 초기화하지 않습니다. 새 빈 프로젝트 재현 순서는 schema.sql → seed.sql → nylon-wool-data.sql → analysis.sql → verify.sql입니다. data SQL은 같은 신규 ID에 대해 재실행 가능한 upsert이며, 기존 데님·혼방 행은 바꾸지 않습니다. 코드·자료를 변경할 때는 검토 JSON을 수정한 후 `tools/build-research-update.py`로 데이터 SQL을 재생성하세요.
+기존 프로젝트 업데이트: `backend/updates/nylon-wool-data.sql` 다음 `backend/updates/nylon-wool-analysis.sql` 순서입니다. 기존 테이블을 초기화하지 않습니다. 새 빈 프로젝트 재현 순서는 schema.sql → seed.sql → nylon-wool-data.sql → analysis.sql → scoring.sql → verify.sql입니다. data SQL은 같은 신규 ID에 대해 재실행 가능한 upsert이며, 기존 데님·혼방 행은 바꾸지 않습니다. 코드·자료를 변경할 때는 검토 JSON을 수정한 후 `tools/build-research-update.py`로 데이터 SQL을 재생성하세요.
 
 문서에 연결된 나일론 근거 논문은 실제 양모 연구입니다. 양모 시험 조건도 원문과 충돌합니다. 원문 일부 검증 결과와 원문서 주장을 분리 보관하며, 미확인 값을 안전 기준이나 실제 원단 측정값으로 사용하지 않습니다. PDF에 인용된 동영상은 이번 작업에서 분석하지 않았습니다.
+
+
+## 호환성 결과 점수 (v0.5.0)
+
+결과 페이지는 종합 원형 점수·항목별 막대·원단 쌍별 근거·주의사항을 표시합니다. 점수는 Supabase의 `lm_analyze_scored`가 기존 카탈로그와 사용자 입력을 읽어 계산하며 난수나 임시 원단별 점수를 쓰지 않습니다. 실제 물성 호환성을 검증한 모델이 아니라 기준을 공개한 사전 점검 지수입니다.
+
+네 항목은 소재·가공 정보 확인, 실측 수축률 차이, 실측 첨부포 오염 등급, 사전 세탁 준비이며 각25%입니다. 미확인은0점으로 반영하고 평가정보 확인도를 별도로 표시합니다. 내구성·봉제 적합성은 근거 부족으로 평가하지 않습니다. 원단 쌍별 점수의 평균을 종합 점수로 표시하며 가장 낮은 쌍도 기준 설명에서 확인할 수 있습니다. 상세 환산식·제약은 backend/API.md를 참고하세요.
+
+기존 프로젝트 추가 배포: `backend/updates/compatibility-scoring.sql`. 기존 분석·연구 데이터는 유지합니다. 프론트의 `analyzeScored`가 새 RPC를 호출하고 기존 `analyze`는 유지됩니다.
+
+선택 조회의 ‘실측 정보 입력’에서 내 시료의 측정값만 입력할 수 있습니다. 수축률 입력 시 시험 조건·측정 방향·수축 종류를 함께 입력합니다. 이 입력은 계산용이며 DB에 저장하지 않습니다.
+
+검증: `npm test`(14개), `npm run test:scoring`(실제 점수 API10개). 기존 데이터 회귀 검증은 `npm run test:live`입니다. 브라우저에서 정보 부족 표시, 조건 누락 차단, 검증용3%포인트 차이/오염3등급/세탁완료 입력의72.5점, 모바일 가로 넘침 없음 등을 확인했습니다. 검증용 값은 실제 사용자 시료의 측정값으로 저장하지 않았으며 확인 후 초기화했습니다.

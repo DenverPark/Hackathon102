@@ -1,4 +1,4 @@
-import { API } from './api.js';
+import { API } from './api.js?v=0.5.0';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => document.querySelectorAll(selector);
@@ -85,6 +85,7 @@ function renderReview() {
     <div class="review-material-tags"><span>${escape(f.structure)}</span><span>${escape(stretch)}</span></div>
     <div class="review-basic-fields"><div class="review-section-label">내 원단 상태<span>모르는 항목은 미확인으로 두세요</span></div><div class="sample-fields">${reviewSelect('color_depth','색상 농도',[['unknown','미확인'],['dark','진한색'],['medium','중간색'],['light','밝은색']],sample.color_depth)}${reviewSelect('prewashed','사전 세탁',[['unknown','미확인'],['true','세탁했어요'],['false','세탁하지 않았어요']],sample.prewashed)}</div></div>
     ${processingFields(f,sample)}
+    ${measurementFields(f,sample)}
     <details class="review-research"><summary><span>원단 특성과 연구 출처</span><span class="review-disclosure-hint">참고자료</span></summary><div class="review-research-body"><p class="review-reference-note">카탈로그 정보는 참고자료입니다. 실제 원단의 상태와 측정값을 대신하지 않습니다.</p><p>${escape(f.summary)}</p>${f.profile_details?.reported_care ? `<p>${escape(f.profile_details.reported_care)}</p>` : ''}<h4>추가로 확인할 정보</h4><ul class="review-gaps">${f.data_gaps.map(g=>`<li>${escape(g)}</li>`).join('')}</ul><h4>자료 출처</h4><ul class="review-source-list">${sourceList(f.source_ids)}</ul><button class="btn btn-ghost evidence-load" data-evidence="${escape(f.id)}">시험 조건과 연구 수치 보기</button><div class="evidence-content" aria-live="polite"></div></div></details></article>`;
   }).join('') || `<div class="review-empty"><span aria-hidden="true">＋</span><h3>함께 확인할 원단을 골라주세요</h3><p>원단을 2개 이상 선택하면 조합을 분석할 수 있어요.</p><button class="btn btn-primary" data-select-more>원단 고르기</button></div>`;
   updateAnalyzeButton();
@@ -104,18 +105,50 @@ function processingFields(f, sample) {
   if(f.category==='wool')fields=reviewSelect('construction','직물·편물 구분',[['unknown','미확인'],['woven','직물'],['knit','편물']],sample.construction)+reviewSelect('shrinkproofed','방축 가공 여부',boolOptions,sample.shrinkproofed);
   return fields?`<details class="review-processing"><summary><span>소재별 추가 정보</span><span class="review-disclosure-hint">선택 입력</span></summary><div class="review-processing-body"><p>관리 라벨이나 원단 설명에서 확인한 정보만 선택해주세요.</p><div class="sample-fields">${fields}</div></div></details>`:'';
 }
+function measurementFields(f,sample){
+  const m=sample.measurement || {};
+  const number=(key,label,min,max,step='any')=>`<label class="review-field"><span>${label}</span><input type="number" data-measure="${key}" min="${min}" max="${max}" step="${step}" value="${m[key] ?? ''}" placeholder="미측정"></label>`;
+  const select=(key,label,options)=>`<label class="review-field"><span>${label}</span><select data-measure="${key}"><option value="">미확인</option>${options.map(([v,t])=>`<option value="${v}" ${m[key]===v?'selected':''}>${t}</option>`).join('')}</select></label>`;
+  return `<details class="review-processing measurement-controls"><summary><span>실측 정보 입력</span><span class="review-disclosure-hint">측정한 경우만</span></summary><div class="review-processing-body"><p>연구 수치가 아닌 내 원단의 측정값만 입력해주세요. 수축률을 입력하면 아래 시험 조건도 함께 입력해야 합니다.</p><div class="sample-fields">${number('shrinkage_pct','길이 수축률 (%)',-100,100)}${number('staining_grade','첨부포 오염 등급 (1~5)',1,5)}${number('wash_temp_c','세탁 온도 (℃)',0,100)}${number('wash_minutes','세탁 시간 (분)',.1,1440)}${number('cycles','세탁 횟수',1,1000,1)}${select('drying','건조 방식',[['air','자연건조'],['flat','펴서 건조'],['tumble','드럼건조']])}${select('direction','측정 방향',[['warp','경사'],['weft','위사']])}${select('shrinkage_kind','수축 종류',[['relaxation','이완 수축'],['felting','펠팅 수축'],['combined','복합 수축']])}</div><p class="measurement-error" role="alert"></p><p>두 시료의 시험 조건과 측정 방향·수축 종류가 같아야 비교합니다. 면적 수축률은 입력하지 마세요.</p></div></details>`;
+}
+function validateMeasurements(){
+  for(const card of $$('.sample-card')){
+    for(const input of card.querySelectorAll('.measurement-controls input'))if(!input.checkValidity()){
+      card.querySelector('.measurement-controls').open=true;input.reportValidity();return false;
+    }
+    const m=samples.get(card.dataset.id)?.measurement;
+    if(m?.shrinkage_pct !== undefined){
+      const missing=['wash_temp_c','wash_minutes','cycles','drying','direction','shrinkage_kind'].some(key=>m[key]===undefined || m[key]==='');
+      if(missing){card.querySelector('.measurement-controls').open=true;card.querySelector('.measurement-error').textContent='수축률을 비교하려면 세탁 조건·건조 방식·측정 방향·수축 종류를 모두 입력해주세요.';return false;}
+    }
+    const error=card.querySelector('.measurement-error');if(error)error.textContent='';
+  }
+  return true;
+}
 function updateAnalyzeButton(){
   const needsSelection=selected.size<2 || selected.size>5;
   $('#btn-test').disabled=busy || needsSelection || !purpose.trim();
   const helper=$('#review-next-hint');
   if(helper)helper.textContent=needsSelection?'함께 확인할 원단을 2~5개 선택해주세요.':!purpose.trim()?'제작 목적을 입력해주세요.':`${selected.size}개 원단의 주의사항과 필요한 테스트를 확인합니다.`;
 }
-$('#selected-fabrics').addEventListener('change',e=>{
+function onSampleInput(e){
+  const measure=e.target.dataset.measure;
+  if(measure){
+    const id=e.target.closest('[data-id]').dataset.id;
+    const sample=samples.get(id);sample.measurement ||= {};
+    if(e.target.value==='')delete sample.measurement[measure];
+    else sample.measurement[measure]=e.target.type==='number'?Number(e.target.value):e.target.value;
+    if(!Object.keys(sample.measurement).length)delete sample.measurement;
+    invalidate();return;
+  }
   const field=e.target.dataset.field; if(!field)return;
   const id=e.target.closest('[data-id]').dataset.id;
   samples.get(id)[field]=['prewashed','heat_set','shrinkproofed'].includes(field)?(e.target.value==='unknown'?null:e.target.value==='true'):e.target.value;
   invalidate();
-});
+}
+$('#selected-fabrics').addEventListener('input',onSampleInput);
+$('#selected-fabrics').addEventListener('change',onSampleInput);
+
 $('#selected-fabrics').addEventListener('click',async e=>{
   if(e.target.closest('[data-select-more]')){switchStep('select');return;}
   const remove=e.target.closest('[data-remove]');
@@ -156,6 +189,7 @@ function renderResearchRecord(record){
 $('#btn-test').addEventListener('click',analyze);
 async function analyze(){
   if(busy || selected.size<2 || !purpose.trim())return;
+  if(!validateMeasurements())return;
   analysis=null;
   switchStep('review');
   currentStep='compat';
@@ -165,22 +199,28 @@ async function analyze(){
   busy=true; updateAnalyzeButton();
   $('#compat-content').innerHTML='<div class="loading-state" role="status"><div class="spinner"></div><p>Supabase에서 조합 분석 중...</p></div>';
   try {
-    analysis=await API.analyze({purpose:purpose.trim(),items:[...selected].map((id,i)=>({fabric_id:id,sample_id:`sample-${i+1}`,...samples.get(id)}))});
+    analysis=await API.analyzeScored({purpose:purpose.trim(),items:[...selected].map((id,i)=>({fabric_id:id,sample_id:`sample-${i+1}`,...samples.get(id)}))});
     renderAnalysis();
     window.dispatchEvent(new CustomEvent('layermatch:analysis',{detail:structuredClone(analysis)}));
   } catch(error){errorView($('#compat-content'),error,analyze);}
   finally{busy=false;updateAnalyzeButton();}
 }
 function renderAnalysis(){
-  const labels={insufficient_data:'실측 정보 부족',needs_testing:'추가 테스트 필요',no_rule_triggered:'현재 규칙의 주의 조건 없음'};
-  $('#compat-content').innerHTML=`<div class="result-header"><div class="result-title">${escape(labels[analysis.status] || analysis.status)}</div><p>${escape(analysis.purpose)}</p><p>현재 분석은 안전·생산 가능 여부를 확정하지 않습니다.</p></div>
-  <div class="combo-chips">${analysis.fabric_snapshots.map(f=>`<span class="combo-chip">${escape(f.name)}</span>`).join('')}</div>
-  <p>수축률 차이: ${analysis.shrinkage_difference_pp===null?'동일 조건 실측 정보가 없어 비교 불가':`${escape(analysis.shrinkage_difference_pp)}%포인트`}</p>
-  <h2 class="section-title">확인할 사항</h2>${analysis.warnings.map(w=>`<article class="pair-card"><p>${escape(w.message)}</p>${w.rule_status?`<small>규칙 상태: ${escape(w.rule_status)}</small>`:''}<ul>${sourceList(w.source_ids)}</ul></article>`).join('') || '<p>현재 규칙이 발동하지 않았습니다. 안전 판정은 아닙니다.</p>'}
-  <details open><summary>미확인 정보 (${analysis.unknown_fields.length})</summary><ul>${analysis.unknown_fields.map(u=>`<li>${escape(u.sample_id ? u.sample_id.replace('sample-','시료 ') : '')} ${escape(fieldNames[u.field] || u.field)} ${escape(u.reason || '')}</li>`).join('')}</ul></details>
-  <h2 class="section-title">권장 테스트 종류</h2>${analysis.recommended_tests.map(t=>`<article class="pair-card"><strong>${escape(testNames[t.test_type] || t.test_type)}</strong><p>${escape(t.reason)}</p></article>`).join('')}
-  <p class="integration-note">${escape(analysis.disclaimer)}<br>${escape(analysis.purpose_usage)}<br>규칙 버전: ${escape(analysis.rule_version)} · 실측 기준: 사용자 보고값만 사용</p>
-  <div class="action-bar"><button class="btn btn-ghost" data-back>← 선택 조회</button><button class="btn btn-primary" data-guide>테스트 가이드 →</button></div>`;
+  const result=analysis.compatibility;
+  if(!result){errorView($('#compat-content'),new Error('점수 계산 응답을 확인할 수 없습니다.'),analyze);return;}
+  const safeScore=value=>Math.max(0,Math.min(100,Number(value)||0));
+  const score=safeScore(result.score);
+  const fabricChip=f=>{const card=selectionCards.find(c=>c.id===f.fabric_id);return `<span class="result-fabric-chip"><i style="background:${card?.color || '#bbb'}"></i>${escape(card?.name || f.name)}</span>`;};
+  const explanations={material:'등록된 소재 특성과 가공 정보',shrinkage:'동일 조건의 실측 수축률 차이',staining:'실측 첨부포 오염 등급',prewash:'관리 조건에 따른 사전 세탁 준비'};
+  $('#compat-content').innerHTML=`<div class="compat-intro"><span class="review-eyebrow">조합 분석 결과</span><h2>제작 전, 함께 확인해보세요</h2><p>${escape(analysis.purpose)} · ${analysis.fabric_snapshots.length}개 원단 · ${result.pairs.length}개 조합</p></div>
+  <div class="result-fabric-chips">${analysis.fabric_snapshots.map(fabricChip).join('<span class="result-plus">+</span>')}</div>
+  <section class="compat-hero"><div class="compat-score-ring" style="--score:${score}"><div><strong>${escape(score)}</strong><span>/ 100점</span></div></div><div class="compat-hero-copy"><span class="compat-draft">사전 점검 지수 · 초안</span><h3>조합 적합도 참고 점수</h3><span class="compat-status">${escape(result.label)}</span><p>물리적 호환성이나 제작 성공률을 예측하는 점수가 아닙니다. 미확인 항목은 0점으로 반영합니다.</p><div class="compat-coverage"><span>평가정보 확인도</span><strong>${escape(result.coverage)}%</strong></div></div></section>
+  <section class="compat-metrics"><div class="compat-section-heading"><h3>항목별 점수</h3><span>4개 항목 · 각 25% 반영</span></div>${result.dimensions.map(d=>`<div class="compat-metric"><div class="compat-metric-label"><strong>${escape(d.label)}</strong><small>${explanations[d.id]}</small></div><div class="compat-track" role="progressbar" aria-label="${escape(d.label)}" aria-valuenow="${safeScore(d.score)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${safeScore(d.score)}%"></span></div><span class="compat-metric-score">${escape(d.score)}<small>점</small></span></div>`).join('')}<p class="compat-not-scored">내구성 · 봉제 적합성은 현재 DB의 평가 근거가 부족해 점수를 산정하지 않습니다.</p></section>
+  <section class="compat-pairs"><div class="compat-section-heading"><h3>원단 쌍별 확인</h3><span>${result.pairs.length}개 조합</span></div>${result.pairs.map(pair=>`<article class="compat-pair"><div class="compat-pair-heading"><div>${pair.fabric_ids.map(id=>{const f=analysis.fabric_snapshots.find(s=>s.fabric_id===id);const card=selectionCards.find(c=>c.id===id);return `<span>${escape(card?.name || f?.name || id)}</span>`;}).join('<span class="pair-link">↔</span>')}</div><strong>${escape(pair.score)}<small>점</small></strong></div><p class="compat-pair-meta">평가정보 ${escape(pair.coverage)}% 확인 · ${pair.status==='insufficient_data'?'추가 정보 필요':pair.status==='needs_testing'?'사전 확인 필요':'입력된 점검 조건 확인'}</p><details><summary>점수 근거와 확인할 사항</summary><div class="compat-pair-evidence">${pair.dimensions.map(d=>`<div><strong>${escape(d.label)} <span>${escape(d.score)}점</span></strong><p>${escape(d.reason)}</p></div>`).join('')}<ul>${pair.warnings.map(w=>`<li>${escape(w.message)}</li>`).join('')}</ul><details><summary>관련 연구 출처</summary><ul>${sourceList([...new Set(pair.source_ids)])}</ul></details></div></details></article>`).join('')}</section>
+  <section class="compat-next-checks"><div class="compat-section-heading"><h3>제작 전 확인할 사항</h3><span>${analysis.warnings.length}개</span></div>${analysis.warnings.map(w=>`<div class="compat-warning"><span aria-hidden="true">!</span><p>${escape(w.message)}</p></div>`).join('') || '<p>현재 규칙에서 추가 주의 조건이 발견되지 않았습니다. 실제 품질 합격을 의미하지 않습니다.</p>'}<details class="compat-unknown"><summary>미확인 정보 ${analysis.unknown_fields.length}개 보기</summary><ul>${analysis.unknown_fields.map(u=>`<li>${escape(u.sample_id ? u.sample_id.replace('sample-','원단 ') : '')} ${escape(fieldNames[u.field] || u.field)} ${escape(u.reason || '')}</li>`).join('')}</ul></details></section>
+  <section class="compat-tests"><div class="compat-section-heading"><h3>다음으로 확인할 테스트</h3></div><div class="compat-test-grid">${analysis.recommended_tests.map(t=>`<div><span aria-hidden="true">${t.test_type==='shrinkage'?'↔':'◐'}</span><strong>${escape(testNames[t.test_type] || t.test_type)}</strong><p>${escape(t.reason)}</p></div>`).join('') || '<p>현재 규칙에서 추가 추천된 테스트가 없습니다.</p>'}</div></section>
+  <details class="compat-method"><summary>점수 계산 기준과 적용 범위</summary><div><p>${escape(result.disclaimer)}</p><ul><li>소재·가공: DB의 조성·조직·출처 및 실제 가공 정보 확인 비율</li><li>수축: max(0, 100 − 실측 차이 × 20), 단위는 %포인트</li><li>이염: (두 시료 중 낮은 오염 등급 − 1) × 25</li><li>사전 세탁: 완료한 시료의 비율 × 100</li><li>쌍별 점수: 네 항목 평균 · 종합 점수: 모든 쌍의 평균</li></ul><p>가중치와 환산식은 검증 전 기획 기준입니다. 연구 수치를 사용자 실측값으로 대입하지 않습니다. 가장 낮은 쌍별 점수는 ${escape(result.min_pair_score)}점입니다.</p><p>${escape(analysis.purpose_usage)}</p><small>점수 기준 ${escape(result.version)} · 분석 규칙 ${escape(analysis.rule_version)}</small></div></details>
+  <div class="review-actions compat-actions"><button class="review-back" data-back>← 선택 정보 수정</button><button class="btn btn-primary" data-guide>테스트 가이드 <span aria-hidden="true">→</span></button></div>`;
   $('#compat-content [data-back]').addEventListener('click',()=>switchStep('review'));
   $('#compat-content [data-guide]').addEventListener('click',()=>switchStep('guide'));
 }

@@ -127,3 +127,20 @@ warning code: `SHRINKAGE_DATA_INSUFFICIENT`, `SHRINKAGE_GAP`, `STAINING_GRADE_CA
 추가 경고: NYLON_PROCESSING_CHECK, WOOL_FELTING_CHECK. 미확인 필드는 기존 unknown_fields에 sample_id와 함께 추가됩니다. fabric_snapshots는 실제 입력 processing과 참고 profile_details를 구분해 반환합니다. 주의 조건이 없다는 응답은 안전 판정이 아닙니다.
 
 lm_fabrics.profile_details는 조사 프로필이며 실제 시료 메타데이터가 아닙니다. lm_evidence.conditions.verification_status와 applicability를 함께 표시하세요. 출처의 evidence_status는 원문 일부 확인, 링크만 보관, 소재 불일치 등을 구분합니다. 업사이클링 사례는 기존 근거 조회로 제공하는 참고 데이터이며 상세 가이드 API나 제작 지시가 아닙니다.
+
+## 점수 포함 분석 (v0.5.0-draft)
+
+`POST /rest/v1/rpc/lm_analyze_scored`, 본문 `{payload: AnalysisInput}`.
+클라이언트는 `api.analyzeScored(payload)`로 호출합니다. 기존 `analyze`/lm_analyze는 호환성을 위해 유지합니다.
+
+기존 분석 응답에 `compatibility`를 추가합니다: score, coverage, min_pair_score, label, dimensions, pairs, not_evaluated, version, disclaimer. 타입은 ScoredAnalysisResponse를 참조하세요. 원단2~5개를 전체 검증한 후 모든 쌍을 분석합니다. 쌍별 점수는 네 축의 산술 평균이고 종합 점수는 모든 쌍의 산술 평균입니다. 반올림은 소수1자리입니다.
+
+- 소재·가공 정보: DB의 조성·조직·근거 연결, 나일론 종류/열고정/코팅 또는 양모 방축 정보의 확인 비율. 양모 조직은 사용자 입력이 확인돼야 점수를 부여합니다.
+- 수축: 동일 조건의 실측 수축률 차이를 %포인트로 계산하고 `max(0,100-20*차이)`로 환산합니다. 기존 비교 조건을 충족하지 못하면0점/미확인입니다.
+- 이염: 두 시료의 실측 첨부포 오염 등급이 모두 있을 때 `(최저등급-1)*25`. 한 시료라도 없으면0점/미확인입니다.
+- 사전 세탁: 완료 시료 비율*100. 관리 라벨이 우선이며 세탁이 모든 소재의 필수 조건이라는 뜻은 아닙니다.
+- 네 축 가중치는 각각25%. `coverage`는 별도의 평가정보 확보율이며 성공 확률이나 통계 신뢰구간이 아닙니다.
+
+가중치·환산식은 이번 화면을 위한 검증 전 기획 지수입니다. 검증된 소재 호환성/생산 합격/성공 확률로 표시하지 마세요. 입력 누락은 낮은 점수의 원인이므로 호환 불가와 구분해야 합니다. 내구성·봉제 적합성은 DB에 검증된 평가 기준이 없어 not_evaluated에 포함합니다. 조사문서 수치를 사용자 시료의 측정값으로 대입하지 않습니다.
+
+선택 조회의 접이식 실측 입력은 저장되지 않는 분석 입력입니다. 길이수축률 입력 시 세탁 온도/시간/횟수·건조·방향·수축종류를 함께 입력해야 합니다. 백엔드는 별도로 모든 입력을 검증합니다. 프론트는 서버가 계산한 점수를 표시하며 가중치·난수 점수를 자체 계산하지 않습니다.

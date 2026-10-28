@@ -33,3 +33,31 @@ export interface AnalysisResponse {
   shrinkage_difference_pp: number|null;
   measurement_basis: 'user_reported_only'; purpose_usage:string; disclaimer:string;
 }
+export interface CompatibilityDimension {
+  id: 'material' | 'shrinkage' | 'staining' | 'prewash';
+  label: string;
+  score: number;
+  coverage?: number;
+  weight?: number;
+  reason?: string;
+}
+export interface ScoredAnalysisResponse extends AnalysisResponse {
+  compatibility: {
+    version: '0.5.0-draft';
+    score: number;
+    coverage: number;
+    min_pair_score: number;
+    label: string;
+    dimensions: CompatibilityDimension[];
+    pairs: Array<{
+      sample_ids: string[]; fabric_ids: string[]; names: string[];
+      score: number; coverage: number; status: AnalysisResponse['status'];
+      dimensions: CompatibilityDimension[];
+      warnings: AnalysisResponse['warnings'];
+      unknown_fields: AnalysisResponse['unknown_fields'];
+      source_ids: string[];
+    }>;
+    not_evaluated: string[];
+    disclaimer: string;
+  };
+}

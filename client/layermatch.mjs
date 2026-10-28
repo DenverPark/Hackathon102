@@ -23,6 +23,7 @@ export function createLayerMatchClient({url,key,getAccessToken=async()=>null,fet
   getEvidence:id=>request('/rest/v1/lm_evidence?select=*&'+eq('fabric_id',id)+'&order=id.asc'),
   listSources:()=>request('/rest/v1/lm_sources?select=*&order=id.asc'),
   analyze:payload=>request('/rest/v1/rpc/lm_analyze',{payload}),
+  analyzeScored:payload=>request('/rest/v1/rpc/lm_analyze_scored',{payload}),
   calculateShrinkage:(before,after)=>request('/rest/v1/rpc/lm_shrinkage',{before_length:before,after_length:after})
  };
 }

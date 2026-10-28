@@ -392,3 +392,82 @@ li { margin: 8px 0; overflow-wrap: anywhere; }
   .review-card-header { gap: 9px; }
   .review-remove { padding: 6px; font-size: 10px; }
 }
+
+/* Compatibility results share the review page's restrained card system. */
+.compat-intro { margin: 8px 0 20px; }
+.compat-intro h2 { font-size: 24px; letter-spacing: -.04em; }
+.compat-intro p { color: #858e9a; font-size: 12px; margin-top: 8px; }
+.result-fabric-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-bottom: 20px; }
+.result-fabric-chip { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; padding: 9px 12px; background: white; border: 1px solid #e8ebf0; border-radius: 9px; }
+.result-fabric-chip i { width: 12px; height: 12px; border-radius: 4px; }
+.result-plus { color: #a7b0bc; font-size: 12px; }
+.compat-hero { display: flex; gap: 32px; align-items: center; background: white; border: 1px solid #e6eaf0; border-radius: 18px; padding: 30px; margin-bottom: 16px; }
+.compat-score-ring { flex-shrink: 0; width: 156px; height: 156px; border-radius: 50%; background: conic-gradient(#1879de calc(var(--score)*1%),#edf2f8 0); padding: 10px; }
+.compat-score-ring > div { width: 100%; height: 100%; background: white; border-radius: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+.compat-score-ring strong { font-size: 40px; letter-spacing: -.04em; color: #176fc6; }
+.compat-score-ring span { font-size: 11px; color: #919ba9; margin-top: 3px; }
+.compat-draft { font-size: 10px; color: #8a96a7; }
+.compat-hero-copy h3 { font-size: 21px; letter-spacing: -.04em; margin: 6px 0 10px; }
+.compat-status { display: inline-block; color: #937743; background: #fbf6ea; border-radius: 5px; font-size: 11px; padding: 5px 8px; }
+.compat-hero-copy > p { color: #8993a0; line-height: 1.8; font-size: 11px; margin-top: 12px; }
+.compat-coverage { display: flex; gap: 12px; font-size: 11px; margin-top: 12px; color: #8b95a3; }
+.compat-coverage strong { color: #536b87; }
+.compat-metrics,.compat-next-checks,.compat-tests { background: white; border: 1px solid #e6eaf0; border-radius: 16px; padding: 24px; margin-bottom: 20px; }
+.compat-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+.compat-section-heading h3 { font-size: 15px; letter-spacing: -.02em; }
+.compat-section-heading > span { font-size: 10px; color: #97a1ae; }
+.compat-metric { display: flex; align-items: center; gap: 18px; margin: 20px 0; }
+.compat-metric-label { width: 165px; flex-shrink: 0; }
+.compat-metric-label strong { display: block; font-size: 12px; font-weight: 600; color: #596575; }
+.compat-metric-label small { display: block; font-size: 10px; color: #a0a8b3; margin-top: 5px; }
+.compat-track { flex: 1; height: 7px; overflow: hidden; background: #edf2f7; border-radius: 20px; }
+.compat-track span { display: block; height: 100%; border-radius: inherit; background: #529ae4; }
+.compat-metric-score { width: 50px; text-align: right; font-size: 14px; color: #596d86; }
+.compat-metric-score small { font-size: 10px; color: #9aa5b2; margin-left: 3px; }
+.compat-not-scored { margin-top: 22px; padding-top: 14px; border-top: 1px solid #eff1f5; font-size: 10px; color: #949da9; line-height: 1.8; }
+.compat-pairs { margin: 26px 0; }
+.compat-pair { padding: 20px; border: 1px solid #e6eaf0; background: white; border-radius: 14px; margin-bottom: 10px; }
+.compat-pair-heading { display: flex; gap: 10px; justify-content: space-between; align-items: center; }
+.compat-pair-heading > div { display: flex; flex-wrap: wrap; gap: 10px; font-size: 13px; font-weight: 600; }
+.pair-link { font-weight: 400; color: #a3adba; }
+.compat-pair-heading > strong { font-size: 22px; color: #3d7bb8; white-space: nowrap; }
+.compat-pair-heading small { font-size: 11px; color: #95a0ad; font-weight: 400; margin-left: 4px; }
+.compat-pair-meta { color: #99a2af; font-size: 10px; margin-top: 8px; }
+#tab-compat details { font-size: 11px; color: #798695; margin: 14px 0 0; line-height: 1.8; }
+#tab-compat summary { font-weight: 500; color: #65778c; }
+.compat-pair-evidence { padding: 12px 0 0; }
+.compat-pair-evidence > div { padding: 12px 0; border-top: 1px solid #f0f2f6; }
+.compat-pair-evidence strong { font-size: 11px; font-weight: 600; color: #60738b; }
+.compat-pair-evidence strong span { margin-left: 8px; font-weight: 400; color: #267bcf; }
+.compat-pair-evidence p { margin-top: 5px; }
+#tab-compat ul { padding-left: 18px; }
+.compat-warning { display: flex; gap: 10px; padding: 13px 0; border-top: 1px solid #f1f3f6; font-size: 11px; line-height: 1.9; color: #788493; }
+.compat-warning > span { width: 18px; height: 18px; flex-shrink: 0; background: #fcf6e9; color: #aa8c53; border-radius: 50%; text-align: center; line-height: 18px; margin-top: 2px; font-size: 10px; }
+.compat-test-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+.compat-test-grid > div { background: #f7f9fc; border-radius: 10px; padding: 16px; }
+.compat-test-grid > div > span { font-size: 19px; display: block; margin-bottom: 10px; color: #7c9fc8; }
+.compat-test-grid strong { font-size: 12px; }
+.compat-test-grid p { font-size: 10px; color: #929dab; line-height: 1.8; margin-top: 7px; }
+#tab-compat .compat-method { padding: 18px 20px; border: 1px solid #e2e7ef; border-radius: 12px; margin-bottom: 22px; }
+.compat-method > div { padding-top: 12px; }
+.compat-method p { margin: 8px 0; }
+.compat-actions .btn { font-size: 12px; }
+.measurement-controls input { width: 100%; padding: 10px 12px; background: white; color: #343a43; border: 1px solid #dfe3e9; border-radius: 8px; font: inherit; font-size: 12px; }
+.measurement-error { color: #bc5b4d !important; margin-top: 12px; }
+@media (max-width: 600px) {
+ .compat-intro h2 { font-size: 21px; }
+ .compat-hero { padding: 22px 18px; gap: 18px; }
+ .compat-score-ring { width: 108px; height: 108px; padding: 7px; }
+ .compat-score-ring strong { font-size: 30px; }
+ .compat-hero-copy h3 { font-size: 16px; }
+ .compat-hero-copy > p { font-size: 10px; }
+ .compat-metrics,.compat-next-checks,.compat-tests { padding: 18px; }
+ .compat-metric { gap: 10px; flex-wrap: wrap; }
+ .compat-metric-label { width: 100%; }
+ .compat-metric-label small { display: inline; margin-left: 8px; }
+ .compat-metric-label strong { display: inline; }
+ .compat-metric-score { font-size: 12px; }
+ .compat-test-grid { grid-template-columns: 1fr; }
+ .compat-pair-heading > div { font-size: 12px; }
+ .compat-pair-heading > strong { font-size: 19px; }
+}
