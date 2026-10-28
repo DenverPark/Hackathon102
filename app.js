@@ -9,6 +9,15 @@ const samples = new Map();
 const steps = ['select','review','compat','guide','action'];
 let currentStep = 'select';
 const colors = {denim:'#2D4A7A',blend:'#B0C4B1'};
+// Presentation matches main. Only records returned by Supabase are selectable.
+const selectionCards = [
+  {name:'나일론',color:'#2C2C2E',desc:'가볍고 내구성이 뛰어난 합성 섬유',tags:['합성','경량','고강도']},
+  {name:'울',color:'#8E7C6A',desc:'보온성이 우수한 천연 동물성 섬유',tags:['천연','보온','중량']},
+  {id:'denim-cotton100',name:'데님',color:'#2D4A7A',desc:'능직으로 짜인 내구성 높은 면직물',tags:['천연','능직','중량']},
+  {id:'cotton65-poly35',name:'코튼 폴리에스터 블렌드',color:'#B0C4B1',desc:'면과 폴리에스터를 혼방한 실용적 원단',tags:['혼방','실용','중량']},
+  {name:'면직물',color:'#E8D5B7',desc:'통기성과 흡습성이 좋은 천연 면 원단',tags:['천연','통기성','중량']},
+  {name:'폴리에스터',color:'#C8D8E4',desc:'구김이 적고 관리가 쉬운 합성 섬유',tags:['합성','경량','속건']},
+];
 const testNames = {shrinkage:'수축률 비교',staining:'이염 확인'};
 const fieldNames = {color_depth:'색상 농도',prewashed:'사전 세탁 여부',staining_grade:'첨부포 이염 등급',comparable_shrinkage:'동일 조건 수축률',measurement:'실측 정보'};
 
@@ -39,10 +48,15 @@ function sourceList(ids) {
   }).join('');
 }
 function renderFabrics() {
-  $('#fabric-list').innerHTML = fabrics.length ? fabrics.map(f => `<button type="button" class="fabric-card ${selected.has(f.id)?'selected':''}" data-id="${escape(f.id)}" aria-pressed="${selected.has(f.id)}">
-    <span class="check-icon">${selected.has(f.id)?'✓':''}</span><span class="color-swatch" style="background:${colors[f.category] || '#bbb'}"></span>
-    <span class="fabric-name">${escape(f.name)}</span><span class="fabric-desc">${escape(f.summary)}</span>
-    <span class="fabric-meta">${[f.structure, f.stretch === 'non_stretch'?'비신축':f.stretch].filter(Boolean).map(t=>`<span class="tag">${escape(t)}</span>`).join('')}</span></button>`).join('') : '<p>등록된 원단이 없습니다.</p>';
+  $('#fabric-list').innerHTML = selectionCards.map(card => {
+    const fabric = fabrics.find(f => f.id === card.id);
+    const isSelected = !!fabric && selected.has(fabric.id);
+    return `<button type="button" class="fabric-card ${isSelected?'selected':''}" ${fabric ? `data-id="${escape(fabric.id)}" aria-pressed="${isSelected}"` : 'disabled'}>
+      ${fabric ? `<span class="check-icon">${isSelected?'✓':''}</span>` : '<span class="preparing-badge">준비 중</span>'}
+      <span class="color-swatch" style="background:${card.color}"></span>
+      <span class="fabric-name">${escape(card.name)}</span><span class="fabric-desc">${escape(card.desc)}</span>
+      <span class="fabric-meta">${card.tags.map(t=>`<span class="tag">${escape(t)}</span>`).join('')}</span></button>`;
+  }).join('');
   $('#selected-count').textContent = selected.size;
   $('#floating-bar').classList.toggle('hidden',currentStep !== 'select' || !selected.size);
 }

@@ -283,7 +283,10 @@ body {
 
 /* Supabase catalogue, sample inputs and research evidence */
 button.fabric-card { font: inherit; color: inherit; text-align: left; width: 100%; }
-.fabric-card > span { display: block; }
+.fabric-card > span:not(.check-icon):not(.fabric-meta) { display: block; }
+.fabric-card:disabled { opacity: 1; cursor: default; }
+.fabric-card:disabled:hover { box-shadow: none; transform: none; }
+.fabric-card .preparing-badge { position: absolute; top: 12px; right: 12px; border-radius: 6px; padding: 3px 7px; background: #f0f0f5; color: #6e6e73; font-size: 11px; font-weight: 600; }
 .sample-card { margin: 16px 0; padding: 16px; background: white; border: 1px solid #dedee3; border-radius: 14px; }
 .sample-fields { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0; }
 .sample-fields label, .purpose-label { display: flex; flex-direction: column; gap: 8px; }
