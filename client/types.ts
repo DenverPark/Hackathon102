@@ -61,3 +61,12 @@ export interface ScoredAnalysisResponse extends AnalysisResponse {
     disclaimer: string;
   };
 }
+
+export interface CatalogueDimension { id:'shrinkage'|'stretch'|'care'|'staining'; label:string; score:number|null; weight?:number; reason?:string; }
+export interface CatalogueAnalysisResponse {
+  schema_version:string; rule_version:string;
+  fabric_snapshots:Array<{sample_id:string;fabric_id:string;name:string;composition:Record<string,number>;source_ids:string[];catalogue_data_gaps:string[];profile_details:Record<string,unknown>}>;
+  warnings:Array<{code:string;message:string;source_ids:string[]}>;
+  recommended_tests:Array<{test_type:TestType;reason:string;priority:'recommended'}>;
+  compatibility:{version:string;score:number|null;min_pair_score:number|null;label:string;confidence:string;dimensions:CatalogueDimension[];pairs:Array<{fabric_ids:string[];names:string[];score:number|null;status:'draft_estimate'|'not_assessable';dimensions:CatalogueDimension[];warnings:CatalogueAnalysisResponse['warnings'];source_ids:string[]}>;not_evaluated:string[];disclaimer:string};
+}

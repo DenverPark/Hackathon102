@@ -14,11 +14,11 @@ python -m http.server 8102 --bind 127.0.0.1
 
 - 프로젝트: `czxcnvgbrrakyydtdhgh`
 - 목록/상세: `lm_fabrics`, 원단 연구 근거: `lm_evidence`, 출처: `lm_sources`
-- 분석: `lm_analyze` RPC, 길이 계산 클라이언트: `lm_shrinkage` RPC
+- 현재 화면 분석: `lm_analyze_catalogue` RPC, 기존 분석 및 길이 계산 RPC는 호환성을 위해 유지
 - 브라우저용 공개 설정: `config.js`. publishable 키는 공개 사용 가능한 키이며 secret/service_role 키는 절대 넣지 않습니다.
 - 기존 DB는 변경하지 않았습니다. `backend/supabase/`는 이미 적용한 SQL의 인계용 사본입니다. 기존 프로젝트에 초기화 SQL을 재실행하지 마세요.
 
-첫 선택 화면은 main과 같은 원단 카드 6종을 표시합니다. DB에 등록된 나일론·울·데님·코튼 폴리 4종을 선택·분석할 수 있고 면직물·폴리에스터는 준비 중으로 표시합니다. 실제 시료의 측정 데이터가 없으므로 연구 값을 자동 입력하거나 임의 점수를 생성하지 않습니다. 색상 농도·사전세탁 미확인을 null/unknown으로 전달하며, 서버의 정보 부족·주의사항·권장 테스트·규칙 버전·연구 적용 한계를 그대로 표시합니다.
+첫 선택 화면은 main과 같은 원단 카드 6종을 표시합니다. DB에 등록된 나일론·울·데님·코튼 폴리 4종을 선택·분석할 수 있고 면직물·폴리에스터는 준비 중으로 표시합니다. 원단만 선택하며 색상·사전세탁·실측 정보는 입력하지 않습니다. DB 소재 분류에 임의의 기획 가정을 적용해 추정 점수를 표시하고, 이염 등 근거가 없는 항목은 평가를 보류합니다.
 
 ## 팀 연결 계약
 
@@ -27,7 +27,7 @@ python -m http.server 8102 --bind 127.0.0.1
 - `window.LayerMatch.getAnalysis()`는 전체 분석 응답의 복사본 또는 null을 반환합니다.
 - 분석 완료 시 `window`에 `layermatch:analysis` CustomEvent가 발생하며 `event.detail`에 전체 응답이 담깁니다.
 - `recommended_tests[].test_type`: `shrinkage`, `staining`. 가이드 상세 ID가 아닌 분류 코드입니다.
-- 원단·목적·시료 정보 수정 시 이전 분석 응답을 무효화합니다.
+- 원단 선택 수정 시 이전 분석 응답을 무효화합니다.
 - API 계약: `backend/API.md`, 연구 검토: `backend/SOURCE_REVIEW.md`.
 
 ## 검증
@@ -44,12 +44,12 @@ npm run test:live
 
 `backend/data/nylon-wool.json`에 조사자료의 프로필2개·출처8개·근거13개를 보관합니다. 원본 PDF는 변경하거나 저장소에 업로드하지 않았습니다. 현재 전체 카탈로그는 원단4개·출처15개·근거23개입니다. 검토 내역은 `backend/NYLON_WOOL_REVIEW.md`, 실제 배포 내역은 `backend/DEPLOYMENT.md`에 있습니다.
 
-기존 프로젝트 업데이트: `backend/updates/nylon-wool-data.sql` 다음 `backend/updates/nylon-wool-analysis.sql` 순서입니다. 기존 테이블을 초기화하지 않습니다. 새 빈 프로젝트 재현 순서는 schema.sql → seed.sql → nylon-wool-data.sql → analysis.sql → scoring.sql → verify.sql입니다. data SQL은 같은 신규 ID에 대해 재실행 가능한 upsert이며, 기존 데님·혼방 행은 바꾸지 않습니다. 코드·자료를 변경할 때는 검토 JSON을 수정한 후 `tools/build-research-update.py`로 데이터 SQL을 재생성하세요.
+기존 프로젝트 업데이트: `backend/updates/nylon-wool-data.sql` 다음 `backend/updates/nylon-wool-analysis.sql` 순서입니다. 기존 테이블을 초기화하지 않습니다. 새 빈 프로젝트 재현 순서는 schema.sql → seed.sql → nylon-wool-data.sql → analysis.sql → scoring.sql → catalogue_scoring.sql → verify.sql입니다. data SQL은 같은 신규 ID에 대해 재실행 가능한 upsert이며, 기존 데님·혼방 행은 바꾸지 않습니다. 코드·자료를 변경할 때는 검토 JSON을 수정한 후 `tools/build-research-update.py`로 데이터 SQL을 재생성하세요.
 
 문서에 연결된 나일론 근거 논문은 실제 양모 연구입니다. 양모 시험 조건도 원문과 충돌합니다. 원문 일부 검증 결과와 원문서 주장을 분리 보관하며, 미확인 값을 안전 기준이나 실제 원단 측정값으로 사용하지 않습니다. PDF에 인용된 동영상은 이번 작업에서 분석하지 않았습니다.
 
 
-## 호환성 결과 점수 (v0.5.0)
+## 이전 호환성 결과 점수 (v0.5.0, 현재 화면에서는 미사용)
 
 결과 페이지는 종합 원형 점수·항목별 막대·원단 쌍별 근거·주의사항을 표시합니다. 점수는 Supabase의 `lm_analyze_scored`가 기존 카탈로그와 사용자 입력을 읽어 계산하며 난수나 임시 원단별 점수를 쓰지 않습니다. 실제 물성 호환성을 검증한 모델이 아니라 기준을 공개한 사전 점검 지수입니다.
 
@@ -60,3 +60,9 @@ npm run test:live
 선택 조회의 ‘실측 정보 입력’에서 내 시료의 측정값만 입력할 수 있습니다. 수축률 입력 시 시험 조건·측정 방향·수축 종류를 함께 입력합니다. 이 입력은 계산용이며 DB에 저장하지 않습니다.
 
 검증: `npm test`(14개), `npm run test:scoring`(실제 점수 API10개). 기존 데이터 회귀 검증은 `npm run test:live`입니다. 브라우저에서 정보 부족 표시, 조건 누락 차단, 검증용3%포인트 차이/오염3등급/세탁완료 입력의72.5점, 모바일 가로 넘침 없음 등을 확인했습니다. 검증용 값은 실제 사용자 시료의 측정값으로 저장하지 않았으며 확인 후 초기화했습니다.
+
+## 현재 원단 프로필 기반 점수 (v0.6.0)
+
+선택한 원단 ID만 lm_analyze_catalogue에 전달합니다. 소재 범주에 임의로 부여한 세탁 반응 등급 비교 40%, DB상 비신축 여부 30%, 소재별 관리 확인 가정 30%를 반영합니다. 신축 정보가 불확실하면 해당 점수를 보류하고 나머지 가중치를 재조정합니다. 이염은 평가 보류이며 내구성과 봉제 적합성도 평가하지 않습니다. 각 수치와 가중치는 검증된 표준이나 실험 결과가 아닌 기획 가정입니다. 여러 원단의 결과는 모든 원단 쌍 점수의 평균입니다. 실제 시료 시험을 대신하지 않습니다.
+
+기존 프로젝트 적용: backend/updates/catalogue-scoring.sql. 검증: npm test 및 npm run test:catalogue.

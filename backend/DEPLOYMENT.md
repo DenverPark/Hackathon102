@@ -34,3 +34,9 @@
 - 함수 속성 실제 조회: lm_analyze_scored의 SECURITY INVOKER(prosecdef=false), STABLE, 고정 빈 search_path, anon EXECUTE=true 확인.
 - 화면 확인: 미입력25점/확인도25%, 검증용 수축5%·2%/오염3·4등급/사전세탁 완료에서72.5점/확인도100%. 입력은 시험용이며 DB에 저장하지 않았습니다. 시험 조건 누락 차단 및 모바일 가로 넘침 없음 확인. 검증 후 입력을 초기화했습니다.
 - 브라우저의 이전 연결 모듈 캐시로 새 메서드를 찾지 못한 문제는 버전이 붙은 정적 자산 URL로 수정했습니다. 숫자 입력은 input/change 이벤트에서 상태를 갱신하도록 보완했습니다.
+
+## 2026-10-29 — 원단만 선택하는 기획용 추정 v0.6.0
+
+- Dashboard SQL Editor에서 updates/catalogue-scoring.sql 적용, catalogue_scoring_applied 확인. 기존 RPC와 데이터는 유지.
+- 사용자 입력 없이 카탈로그 분류만 사용하며 점수와 가중치는 검증되지 않은 기획 가정. 이염은 평가 보류.
+- 실제 Supabase에서 등록된 네 원단의 여섯 조합, 순서 변경, 다중 쌍 평균과 잘못된 입력 검증 확인. npm test 15개 통과.
