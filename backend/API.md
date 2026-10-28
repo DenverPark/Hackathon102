@@ -1,4 +1,4 @@
-# 원단 선택·조회 / 조합 분석 API 계약 v1.0
+# 원단 선택·조회 / 조합 분석 API 계약 v1.1
 
 Base URL: `https://czxcnvgbrrakyydtdhgh.supabase.co`
 
@@ -19,7 +19,7 @@ publishable key를 Bearer 토큰 자리에 넣지 마세요. 모든 API는 읽�
 | 수축률 계산 | POST `/rest/v1/rpc/lm_shrinkage` |
 
 REST 조회 반환은 배열. 상세가 없으면 빈 배열이며 client adapter는 null로 변환합니다.
-현재 ID: `denim-cotton100`, `cotton65-poly35`.
+현재 ID: `denim-cotton100`, `cotton65-poly35`, `nylon100`, `wool100`.
 
 ## 분석 요청
 
@@ -106,3 +106,24 @@ warning code: `SHRINKAGE_DATA_INSUFFICIENT`, `SHRINKAGE_GAP`, `STAINING_GRADE_CA
 - 주의사항 없음 상태를 ‘안전’으로 표시하지 않음.
 - 연구 수치에는 시료·조건·적용 한계 표시.
 - 결과/가이드 담당자에게 전체 분석 응답과 test_type을 전달.
+
+
+## 나일론·울 확장 (2026-10-28, schema 1.1 / rule 0.4.0-draft)
+
+기존 입력은 그대로 지원합니다. 새 필드는 미확인일 때 추정하지 않고 생략합니다.
+
+| 입력 필드 | 값 | 적용 대상 |
+|---|---|---|
+| nylon_type | nylon6 / nylon66 / unknown | 나일론 |
+| heat_set | boolean / null | 나일론 열고정 |
+| coating | none / pu / acrylic / dwr / multiple / other / unknown | 나일론 코팅·발수 등 가공 |
+| construction | woven / knit / unknown | 양모 조직 |
+| shrinkproofed | boolean / null | 양모 방축·슈퍼워시 가공 |
+| measurement.shrinkage_kind | relaxation / felting / combined / unknown | 수축 종류 |
+| measurement.shrinkage_basis | linear | 방향별 길이 수축률만 지원 |
+
+양모 실측 수축률이 있어도 종류가 미확인이면 비교하지 않습니다. 종류·조건이 다르면 차이는 null입니다. 면적수축률(area_shrinkage_pct 또는 shrinkage_basis=area)은 HTTP400으로 거절하며 길이 수축률에 대입하지 않습니다. 연구문서 수치는 어떤 경우에도 자동 입력하지 않습니다.
+
+추가 경고: NYLON_PROCESSING_CHECK, WOOL_FELTING_CHECK. 미확인 필드는 기존 unknown_fields에 sample_id와 함께 추가됩니다. fabric_snapshots는 실제 입력 processing과 참고 profile_details를 구분해 반환합니다. 주의 조건이 없다는 응답은 안전 판정이 아닙니다.
+
+lm_fabrics.profile_details는 조사 프로필이며 실제 시료 메타데이터가 아닙니다. lm_evidence.conditions.verification_status와 applicability를 함께 표시하세요. 출처의 evidence_status는 원문 일부 확인, 링크만 보관, 소재 불일치 등을 구분합니다. 업사이클링 사례는 기존 근거 조회로 제공하는 참고 데이터이며 상세 가이드 API나 제작 지시가 아닙니다.

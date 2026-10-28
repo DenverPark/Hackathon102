@@ -10,7 +10,7 @@ create table public.lm_fabrics (
  id text primary key, name text not null, category text not null,
  composition jsonb not null check(jsonb_typeof(composition)='object'),
  structure text, stretch text, summary text not null,
- source_ids text[] not null, data_gaps text[] not null default '{}', created_at timestamptz default now()
+ source_ids text[] not null, data_gaps text[] not null default '{}', profile_details jsonb not null default '{}'::jsonb, created_at timestamptz default now()
 );
 create table public.lm_evidence (
  id text primary key, fabric_id text not null references public.lm_fabrics(id),
@@ -39,3 +39,5 @@ begin
  return round((before_length-after_length)/before_length*100,4);
 end $$;
 
+
+commit;

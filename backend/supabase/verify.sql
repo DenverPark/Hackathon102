@@ -1,9 +1,9 @@
 -- Read-only catalogue/analysis checks plus a rolled-back unauthorized insert attempt.
 begin;
 do $$declare p jsonb;r jsonb;bad jsonb;begin
- if (select count(*) from public.lm_fabrics)<>2 then raise exception 'fabric count';end if;
- if (select count(*) from public.lm_sources)<>7 then raise exception 'source count';end if;
- if (select count(*) from public.lm_evidence)<>10 then raise exception 'evidence count';end if;
+ if (select count(*) from public.lm_fabrics)<>4 then raise exception 'fabric count';end if;
+ if (select count(*) from public.lm_sources)<>15 then raise exception 'source count';end if;
+ if (select count(*) from public.lm_evidence)<>23 then raise exception 'evidence count';end if;
  if exists(select 1 from public.lm_evidence where usable_as_actual_measurement) then raise exception 'research leak';end if;
  if exists(select 1 from public.lm_sources where document_name ~ '^[A-Z]:') then raise exception 'local path exposure';end if;
  if exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname in ('lm_sources','lm_fabrics','lm_evidence') and not c.relrowsecurity) then raise exception 'RLS disabled';end if;
@@ -49,7 +49,7 @@ do $$declare p jsonb;r jsonb;bad jsonb;begin
 end $$;
 set local role anon;
 do $$begin
- if (select count(*) from public.lm_fabrics)<>2 then raise exception 'anon read';end if;
+ if (select count(*) from public.lm_fabrics)<>4 then raise exception 'anon read';end if;
  perform public.lm_analyze('{"purpose":"x","items":[{"fabric_id":"denim-cotton100"},{"fabric_id":"cotton65-poly35"}]}');
  begin insert into public.lm_fabrics(id,name,category,composition,summary,source_ids) values('bad','bad','bad','{}','bad','{}');raise exception 'anon write';exception when insufficient_privilege then null;end;
 end $$;

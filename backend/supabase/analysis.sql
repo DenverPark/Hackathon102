@@ -39,6 +39,41 @@ begin
    unknowns:=unknowns||jsonb_build_array(jsonb_build_object('sample_id',sample_id,'field','color_depth'));end if;
   if item->>'prewashed' is null then
    unknowns:=unknowns||jsonb_build_array(jsonb_build_object('sample_id',sample_id,'field','prewashed'));end if;
+  -- Material/processing metadata is always user-reported, never inferred from research.
+  foreach k in array array['nylon_type','coating','construction'] loop
+   if item ? k and (jsonb_typeof(item->k) <> 'string' or not (item->>k = any(case k
+    when 'nylon_type' then array['nylon6','nylon66','unknown']
+    when 'coating' then array['none','pu','acrylic','dwr','multiple','other','unknown']
+    else array['woven','knit','unknown'] end))) then
+    raise exception 'Invalid processing field: %',k using errcode='22023';end if;
+  end loop;
+  foreach k in array array['heat_set','shrinkproofed'] loop
+   if item ? k and jsonb_typeof(item->k) not in ('boolean','null') then
+    raise exception '% must be boolean or null',k using errcode='22023';end if;
+  end loop;
+  if f.category='nylon' then
+   foreach k in array array['nylon_type','coating','heat_set'] loop
+    if item->>k is null or item->>k='unknown' then
+     unknowns:=unknowns||jsonb_build_array(jsonb_build_object('sample_id',sample_id,'field',k));end if;
+   end loop;
+   if coalesce(item->>'coating','unknown')<>'none' or item->>'heat_set' is null or item->>'heat_set'='false' or coalesce(item->>'nylon_type','unknown')='unknown' then
+    warnings:=warnings||jsonb_build_array(jsonb_build_object('code','NYLON_PROCESSING_CHECK','sample_id',sample_id,
+     'message','나일론6/6,6·열고정·코팅 이력과 관리 라벨을 확인하세요. 조사자료의 온도·수축률을 실제 시료에 적용하지 않습니다.',
+     'source_ids',jsonb_build_array('bpc-report')));
+    needs_shrinkage:=true;
+   end if;
+  elsif f.category='wool' then
+   foreach k in array array['construction','shrinkproofed'] loop
+    if item->>k is null or item->>k='unknown' then
+     unknowns:=unknowns||jsonb_build_array(jsonb_build_object('sample_id',sample_id,'field',k));end if;
+   end loop;
+   if item->>'shrinkproofed' is distinct from 'true' then
+    warnings:=warnings||jsonb_build_array(jsonb_build_object('code','WOOL_FELTING_CHECK','sample_id',sample_id,
+     'message','양모의 방축 가공 여부와 직물·편물 구분을 확인하세요. 펠팅 수축을 이완 수축과 혼합하지 말고 관리 라벨에 맞춰 실제 시료를 확인하세요.',
+     'source_ids',jsonb_build_array('bpc-report','bpc-kci-wool')));
+    needs_shrinkage:=true;
+   end if;
+  end if;
   m:=item->'measurement';
   if m is not null and m<>'null'::jsonb then
    if jsonb_typeof(m)<>'object' then raise exception 'measurement must be object or null' using errcode='22023';end if;
@@ -48,7 +83,17 @@ begin
     if v<1 or v>5 then raise exception 'staining_grade range is 1-5' using errcode='22023';end if;
     low_grade:=low_grade or (v<=3 and coalesce(item->>'color_depth'='dark',false));
    end if;
+   if m ? 'shrinkage_kind' and (jsonb_typeof(m->'shrinkage_kind')<>'string' or m->>'shrinkage_kind' not in ('relaxation','felting','combined','unknown')) then
+    raise exception 'Invalid shrinkage_kind' using errcode='22023';end if;
+   if m ? 'shrinkage_basis' and (jsonb_typeof(m->'shrinkage_basis')<>'string' or m->>'shrinkage_basis'<>'linear') then
+    raise exception 'Only linear shrinkage_pct is supported; do not submit area shrinkage' using errcode='22023';end if;
+   if m ? 'area_shrinkage_pct' then
+    raise exception 'Area shrinkage must not be mixed with linear shrinkage_pct' using errcode='22023';end if;
    if m ? 'shrinkage_pct' then
+    if f.category='wool' and coalesce(m->>'shrinkage_kind','unknown')='unknown' then
+     comparable:=false;
+     unknowns:=unknowns||jsonb_build_array(jsonb_build_object('sample_id',sample_id,'field','shrinkage_kind','reason','양모의 이완·펠팅·복합 수축을 구분해야 합니다.'));
+    end if;
     if jsonb_typeof(m->'shrinkage_pct')<>'number' then raise exception 'shrinkage_pct must be number' using errcode='22023';end if;
     v:=(m->>'shrinkage_pct')::numeric;
     if v< -100 or v>100 then raise exception 'shrinkage_pct range is -100 to 100' using errcode='22023';end if;
@@ -70,7 +115,7 @@ begin
    unknowns:=unknowns||jsonb_build_array(jsonb_build_object('sample_id',sample_id,'field','staining_grade'));
    needs_staining:=true;end if;
   snapshots:=snapshots||jsonb_build_array(jsonb_build_object('sample_id',sample_id,'fabric_id',f.id,'name',f.name,'composition',f.composition,
-   'color_depth',coalesce(item->>'color_depth','unknown'),'prewashed',item->'prewashed','source_ids',f.source_ids,'catalogue_data_gaps',f.data_gaps));
+   'color_depth',coalesce(item->>'color_depth','unknown'),'prewashed',item->'prewashed','source_ids',f.source_ids,'catalogue_data_gaps',f.data_gaps,'profile_details',f.profile_details,'processing',jsonb_build_object('nylon_type',item->'nylon_type','coating',item->'coating','heat_set',item->'heat_set','construction',item->'construction','shrinkproofed',item->'shrinkproofed')));
  end loop;
  if measured<>n or not comparable then
   needs_shrinkage:=true;
@@ -91,7 +136,7 @@ begin
   warnings:=warnings||jsonb_build_array(jsonb_build_object('code','PREWASH_CHECK','message','사전 세탁하지 않은 시료가 있습니다. 관리 라벨과 작은 시료 테스트를 먼저 확인하세요.','source_ids',jsonb_build_array('plan')));end if;
  if needs_shrinkage then tests:=tests||jsonb_build_array(jsonb_build_object('test_type','shrinkage','reason','치수 변화 또는 측정 조건 확인 필요','priority','recommended'));end if;
  if needs_staining then tests:=tests||jsonb_build_array(jsonb_build_object('test_type','staining','reason','이염 등급 미확인 또는 색상 대비 확인 필요','priority','recommended'));end if;
- return jsonb_build_object('schema_version','1.0','rule_version','0.2.0-draft','purpose',payload->>'purpose',
+ return jsonb_build_object('schema_version','1.1','rule_version','0.4.0-draft','purpose',payload->>'purpose',
   'status',case when jsonb_array_length(unknowns)>0 then 'insufficient_data' when jsonb_array_length(warnings)>0 then 'needs_testing' else 'no_rule_triggered' end,
   'fabric_snapshots',snapshots,'warnings',warnings,'unknown_fields',unknowns,'recommended_tests',tests,'shrinkage_difference_pp',gap,
   'measurement_basis','user_reported_only','purpose_usage','기록용 문맥이며 목적별 별도 판정 규칙은 아직 검증되지 않았습니다.',

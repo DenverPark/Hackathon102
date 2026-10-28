@@ -11,15 +11,15 @@ let currentStep = 'select';
 const colors = {denim:'#2D4A7A',blend:'#B0C4B1'};
 // Presentation matches main. Only records returned by Supabase are selectable.
 const selectionCards = [
-  {name:'나일론',color:'#2C2C2E',desc:'가볍고 내구성이 뛰어난 합성 섬유',tags:['합성','경량','고강도']},
-  {name:'울',color:'#8E7C6A',desc:'보온성이 우수한 천연 동물성 섬유',tags:['천연','보온','중량']},
+  {id:'nylon100',name:'나일론',color:'#2C2C2E',desc:'가볍고 내구성이 뛰어난 합성 섬유',tags:['합성','경량','고강도']},
+  {id:'wool100',name:'울',color:'#8E7C6A',desc:'보온성이 우수한 천연 동물성 섬유',tags:['천연','보온','중량']},
   {id:'denim-cotton100',name:'데님',color:'#2D4A7A',desc:'능직으로 짜인 내구성 높은 면직물',tags:['천연','능직','중량']},
   {id:'cotton65-poly35',name:'코튼 폴리에스터 블렌드',color:'#B0C4B1',desc:'면과 폴리에스터를 혼방한 실용적 원단',tags:['혼방','실용','중량']},
   {name:'면직물',color:'#E8D5B7',desc:'통기성과 흡습성이 좋은 천연 면 원단',tags:['천연','통기성','중량']},
   {name:'폴리에스터',color:'#C8D8E4',desc:'구김이 적고 관리가 쉬운 합성 섬유',tags:['합성','경량','속건']},
 ];
 const testNames = {shrinkage:'수축률 비교',staining:'이염 확인'};
-const fieldNames = {color_depth:'색상 농도',prewashed:'사전 세탁 여부',staining_grade:'첨부포 이염 등급',comparable_shrinkage:'동일 조건 수축률',measurement:'실측 정보'};
+const fieldNames = {color_depth:'색상 농도',prewashed:'사전 세탁 여부',staining_grade:'첨부포 이염 등급',comparable_shrinkage:'동일 조건 수축률',measurement:'실측 정보',nylon_type:'나일론 종류',coating:'코팅·가공',heat_set:'열고정 여부',construction:'직물·편물 구분',shrinkproofed:'방축 가공 여부',shrinkage_kind:'수축 종류'};
 
 function errorView(target, error, retry) {
   target.innerHTML = `<div class="empty-state" role="alert"><p>연결에 실패했습니다. ${escape(error.message)}</p><button class="btn btn-primary" data-retry>다시 시도</button></div>`;
@@ -78,16 +78,24 @@ function renderReview() {
     return `<article class="sample-card" data-id="${escape(f.id)}"><div class="selected-item"><div class="info"><div class="name">${escape(f.name)}</div><div class="detail">${escape(f.summary)}</div></div><button class="btn-remove" data-remove="${escape(f.id)}" aria-label="${escape(f.name)} 제거">✕</button></div>
     <div class="sample-fields"><label>색상 농도<select data-field="color_depth">${[['unknown','미확인'],['dark','진한색'],['medium','중간색'],['light','밝은색']].map(([v,t])=>`<option value="${v}" ${sample.color_depth===v?'selected':''}>${t}</option>`).join('')}</select></label>
     <label>사전 세탁<select data-field="prewashed">${[['unknown','미확인'],['true','완료'],['false','미실시']].map(([v,t])=>`<option value="${v}" ${String(sample.prewashed??'unknown')===v?'selected':''}>${t}</option>`).join('')}</select></label></div>
-    <details><summary>연구 근거와 출처</summary><p>실제 소유 시료의 측정값이 아닌 참고 연구입니다.</p><p>미확인 정보: ${escape(f.data_gaps.join(' · '))}</p><ul>${sourceList(f.source_ids)}</ul><button class="btn btn-ghost" data-evidence="${escape(f.id)}">연구 상세 조회</button><div class="evidence-content"></div></details></article>`;
+    ${processingFields(f, sample)}
+    <details><summary>연구 근거와 출처</summary><p>실제 소유 시료의 측정값이 아닌 참고 연구입니다.</p>${f.profile_details?.reported_care ? `<p>${escape(f.profile_details.reported_care)}</p>` : ''}<p>미확인 정보: ${escape(f.data_gaps.join(' · '))}</p><ul>${sourceList(f.source_ids)}</ul><button class="btn btn-ghost" data-evidence="${escape(f.id)}">연구 상세 조회</button><div class="evidence-content"></div></details></article>`;
   }).join('') || '<p>선택된 원단이 없습니다.</p>';
   updateAnalyzeButton();
 }
 let purpose = '원단 조합 검토';
+function processingFields(f, sample) {
+  const select = (field, options) => `<label>${escape(fieldNames[field])}<select data-field="${field}">${options.map(([value,label]) => `<option value="${value}" ${String(sample[field] ?? 'unknown') === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>`;
+  const boolOptions = [['unknown','미확인'],['true','완료'],['false','미가공']];
+  if (f.category === 'nylon') return `<div class="sample-fields">${select('nylon_type',[['unknown','미확인'],['nylon6','나일론 6'],['nylon66','나일론 6,6']])}${select('coating',[['unknown','미확인'],['none','코팅 없음'],['pu','PU'],['acrylic','아크릴'],['dwr','발수(DWR)'],['multiple','복합 가공'],['other','기타']])}${select('heat_set',boolOptions)}</div>`;
+  if (f.category === 'wool') return `<div class="sample-fields">${select('construction',[['unknown','미확인'],['woven','직물'],['knit','편물']])}${select('shrinkproofed',boolOptions)}</div>`;
+  return '';
+}
 function updateAnalyzeButton(){ $('#btn-test').disabled = busy || selected.size < 2 || selected.size > 5 || !purpose.trim(); }
 $('#selected-fabrics').addEventListener('change',e=>{
   const field=e.target.dataset.field; if(!field)return;
   const id=e.target.closest('[data-id]').dataset.id;
-  samples.get(id)[field]=field==='prewashed'?(e.target.value==='unknown'?null:e.target.value==='true'):e.target.value;
+  samples.get(id)[field]=['prewashed','heat_set','shrinkproofed'].includes(field)?(e.target.value==='unknown'?null:e.target.value==='true'):e.target.value;
   invalidate();
 });
 $('#selected-fabrics').addEventListener('click',async e=>{
