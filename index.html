@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>원단 조합 테스트 서비스</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 헤더 -->
+    <header class="header">
+      <h1>🧵 원단 조합 테스트</h1>
+      <p class="subtitle">보유 원단을 선택하고 조합 적합성을 확인하세요</p>
+    </header>
+
+    <!-- 스텝 인디케이터 -->
+    <div class="step-indicator" id="step-indicator">
+      <div class="step active" data-step="select"><span class="step-num">1</span><span class="step-label">원단 선택</span></div>
+      <div class="step-line"></div>
+      <div class="step" data-step="review"><span class="step-num">2</span><span class="step-label">선택 조회</span></div>
+      <div class="step-line"></div>
+      <div class="step" data-step="compat"><span class="step-num">3</span><span class="step-label">호환성 결과</span></div>
+      <div class="step-line"></div>
+      <div class="step" data-step="guide"><span class="step-num">4</span><span class="step-label">테스트 가이드</span></div>
+      <div class="step-line"></div>
+      <div class="step" data-step="action"><span class="step-num">5</span><span class="step-label">조치 추천</span></div>
+    </div>
+
+    <!-- ① 원단 선택 -->
+    <section id="tab-select" class="tab-panel active">
+      <div id="fabric-list" class="fabric-grid"></div>
+    </section>
+
+    <!-- ② 선택 조회 -->
+    <section id="tab-review" class="tab-panel">
+      <div id="selected-summary" class="selected-summary"></div>
+      <div id="selected-fabrics" class="selected-list"></div>
+      <div class="action-bar">
+        <button class="btn btn-ghost" onclick="switchStep('select')">← 돌아가기</button>
+        <button id="btn-test" class="btn btn-primary" disabled>🔬 호환성 분석</button>
+      </div>
+    </section>
+
+    <!-- ③ 호환성 결과 -->
+    <section id="tab-compat" class="tab-panel">
+      <div id="compat-content"></div>
+    </section>
+
+    <!-- ④ 테스트 가이드 + 결과 입력 -->
+    <section id="tab-guide" class="tab-panel">
+      <div id="guide-content"></div>
+    </section>
+
+    <!-- ⑤ 조치 추천 -->
+    <section id="tab-action" class="tab-panel">
+      <div id="action-content"></div>
+    </section>
+
+    <!-- 플로팅 바 -->
+    <div id="floating-bar" class="floating-bar hidden">
+      <span id="selected-count">0</span>개 선택됨
+      <button class="btn btn-small" onclick="switchStep('review')">조회 →</button>
+    </div>
+  </div>
+
+  <script src="api.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
