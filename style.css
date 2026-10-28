@@ -280,3 +280,18 @@ body {
   .step-label { display: none; }
   .step-indicator { gap: 0; }
 }
+
+/* Supabase catalogue, sample inputs and research evidence */
+button.fabric-card { font: inherit; color: inherit; text-align: left; width: 100%; }
+.fabric-card > span { display: block; }
+.sample-card { margin: 16px 0; padding: 16px; background: white; border: 1px solid #dedee3; border-radius: 14px; }
+.sample-fields { display: flex; gap: 16px; flex-wrap: wrap; margin: 16px 0; }
+.sample-fields label, .purpose-label { display: flex; flex-direction: column; gap: 8px; }
+.sample-fields select, .purpose-label input { padding: 10px; font: inherit; border: 1px solid #bbb; border-radius: 8px; }
+.purpose-label { max-width: 480px; margin: 20px auto 0; font-size: 15px; text-align: left; }
+.integration-note { margin: 16px 0; padding: 16px; background: #f2f4f8; line-height: 1.7; font-size: 14px; border-radius: 10px; }
+.evidence-record { padding: 16px 0; border-bottom: 1px solid #ddd; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; padding: 12px; background: #f5f5f7; }
+details { margin: 16px 0; line-height: 1.7; }
+summary { cursor: pointer; font-weight: 600; }
+li { margin: 8px 0; overflow-wrap: anywhere; }

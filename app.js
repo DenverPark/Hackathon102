@@ -1,480 +1,135 @@
-// ============================================================
-//  app.js — UI 컨트롤러
-//  데이터는 모두 api.js (API 레이어)를 통해 접근
-// ============================================================
+import { API } from './api.js';
 
-// === 상태 ===
-let fabricsCache = [];          // 원단 목록 캐시
-let selectedIds  = new Set();
-let compatResult = null;        // 호환성 분석 결과
-let testGuides   = [];          // 진행 테스트 가이드 목록
-let testInputs   = {};          // 사용자 테스트 결과 입력값
-
-// === DOM ===
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => document.querySelectorAll(sel);
-
-const $fabricList      = $('#fabric-list');
-const $selectedList    = $('#selected-fabrics');
-const $selectedSummary = $('#selected-summary');
-const $btnTest         = $('#btn-test');
-const $floatingBar     = $('#floating-bar');
-const $selectedCount   = $('#selected-count');
-const $compatContent   = $('#compat-content');
-const $guideContent    = $('#guide-content');
-const $actionContent   = $('#action-content');
-
-// ============================================================
-//  스텝 전환
-// ============================================================
-const STEPS = ['select', 'review', 'compat', 'guide', 'action'];
+const $ = selector => document.querySelector(selector);
+const $$ = selector => document.querySelectorAll(selector);
+const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const json = value => escape(JSON.stringify(value, null, 2));
+let fabrics = [], sources = [], selected = new Set(), analysis = null, busy = false;
+const samples = new Map();
+const steps = ['select','review','compat','guide','action'];
 let currentStep = 'select';
+const colors = {denim:'#2D4A7A',blend:'#B0C4B1'};
+const testNames = {shrinkage:'수축률 비교',staining:'이염 확인'};
+const fieldNames = {color_depth:'색상 농도',prewashed:'사전 세탁 여부',staining_grade:'첨부포 이염 등급',comparable_shrinkage:'동일 조건 수축률',measurement:'실측 정보'};
 
-function switchStep(stepName) {
-  currentStep = stepName;
-
-  // 패널 전환
-  $$('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${stepName}`));
-
-  // 인디케이터 업데이트
-  const stepIdx = STEPS.indexOf(stepName);
-  $$('.step-indicator .step').forEach((el, i) => {
-    el.classList.remove('active', 'done');
-    if (i < stepIdx)  el.classList.add('done');
-    if (i === stepIdx) el.classList.add('active');
-  });
-
-  // 플로팅 바 — 원단 선택 탭에서만 표시
-  $floatingBar.classList.toggle('hidden', stepName !== 'select' || selectedIds.size === 0);
-
-  // 탭별 렌더 트리거
-  if (stepName === 'review') renderSelectedView();
+function errorView(target, error, retry) {
+  target.innerHTML = `<div class="empty-state" role="alert"><p>연결에 실패했습니다. ${escape(error.message)}</p><button class="btn btn-primary" data-retry>다시 시도</button></div>`;
+  target.querySelector('[data-retry]').addEventListener('click', retry);
 }
-
-// 인디케이터 클릭으로 이전 스텝 이동 (완료된 스텝만)
-$$('.step-indicator .step').forEach((el) => {
-  el.addEventListener('click', () => {
-    const target = el.dataset.step;
-    const targetIdx = STEPS.indexOf(target);
-    const curIdx = STEPS.indexOf(currentStep);
-    if (targetIdx <= curIdx) switchStep(target);
-  });
-});
-
-
-// ============================================================
-//  ① 원단 선택 렌더
-// ============================================================
-function renderFabricList() {
-  $fabricList.innerHTML = fabricsCache.map(f => {
-    const sel = selectedIds.has(f.id);
-    return `
-      <div class="fabric-card ${sel ? 'selected' : ''}" data-id="${f.id}">
-        <div class="check-icon">${sel ? '✓' : ''}</div>
-        <div class="color-swatch" style="background:${f.color}"></div>
-        <div class="fabric-name">${f.name}</div>
-        <div class="fabric-desc">${f.desc}</div>
-        <div class="fabric-meta">
-          ${f.tags.map(t => `<span class="tag">${t}</span>`).join('')}
-        </div>
-      </div>`;
+function switchStep(step) {
+  if (busy || !steps.includes(step) || (['compat','guide','action'].includes(step) && !analysis)) return;
+  currentStep = step;
+  $$('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${step}`));
+  $$('.step').forEach((p,i) => { p.classList.toggle('active',i === steps.indexOf(step)); p.classList.toggle('done',i < steps.indexOf(step)); });
+  $('#floating-bar').classList.toggle('hidden',step !== 'select' || !selected.size);
+  if (step === 'review') renderReview();
+  if (step === 'guide' || step === 'action') renderHandoff(step);
+}
+window.switchStep = switchStep;
+$$('.step').forEach(el => el.addEventListener('click',() => {
+  if (steps.indexOf(el.dataset.step) <= steps.indexOf(currentStep)) switchStep(el.dataset.step);
+}));
+function invalidate() { analysis = null; }
+function sourceList(ids) {
+  return ids.map(id => {
+    const s = sources.find(s => s.id === id);
+    if (!s) return `<li>${escape(id)}</li>`;
+    let url; try { const u = new URL(s.url); if (['https:','http:'].includes(u.protocol)) url = u.href; } catch {}
+    return `<li>${url ? `<a href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(s.title)}</a>` : escape(s.title)}<br><small>${escape(s.locator)} · ${escape(s.checked_at)}<br>${escape(s.limitations)}</small></li>`;
   }).join('');
 }
-
-$fabricList.addEventListener('click', (e) => {
-  const card = e.target.closest('.fabric-card');
-  if (!card) return;
-  const id = Number(card.dataset.id);
-  selectedIds.has(id) ? selectedIds.delete(id) : selectedIds.add(id);
-  renderFabricList();
-  renderSelectedView();
-  updateFloatingBar();
+function renderFabrics() {
+  $('#fabric-list').innerHTML = fabrics.length ? fabrics.map(f => `<button type="button" class="fabric-card ${selected.has(f.id)?'selected':''}" data-id="${escape(f.id)}" aria-pressed="${selected.has(f.id)}">
+    <span class="check-icon">${selected.has(f.id)?'✓':''}</span><span class="color-swatch" style="background:${colors[f.category] || '#bbb'}"></span>
+    <span class="fabric-name">${escape(f.name)}</span><span class="fabric-desc">${escape(f.summary)}</span>
+    <span class="fabric-meta">${[f.structure, f.stretch === 'non_stretch'?'비신축':f.stretch].filter(Boolean).map(t=>`<span class="tag">${escape(t)}</span>`).join('')}</span></button>`).join('') : '<p>등록된 원단이 없습니다.</p>';
+  $('#selected-count').textContent = selected.size;
+  $('#floating-bar').classList.toggle('hidden',currentStep !== 'select' || !selected.size);
+}
+$('#fabric-list').addEventListener('click',e => {
+  const card = e.target.closest('[data-id]'); if (!card || busy) return;
+  const id = card.dataset.id;
+  if (selected.has(id)) selected.delete(id);
+  else if (selected.size < 5) selected.add(id);
+  else return;
+  if (!samples.has(id)) samples.set(id,{color_depth:'unknown',prewashed:null});
+  invalidate(); renderFabrics();
 });
-
-
-// ============================================================
-//  ② 선택 조회 렌더
-// ============================================================
-function renderSelectedView() {
-  const selected = fabricsCache.filter(f => selectedIds.has(f.id));
-
-  $selectedSummary.innerHTML = `
-    <div class="count">${selected.length}</div>
-    <div class="label">개 원단 선택됨</div>`;
-
-  if (selected.length === 0) {
-    $selectedList.innerHTML = `
-      <div class="empty-state">
-        <div class="icon">📋</div>
-        <p>선택된 원단이 없습니다<br><small>원단 선택 탭에서 원단을 선택해주세요</small></p>
-      </div>`;
-  } else {
-    $selectedList.innerHTML = selected.map(f => `
-      <div class="selected-item">
-        <div class="swatch" style="background:${f.color}"></div>
-        <div class="info">
-          <div class="name">${f.name}</div>
-          <div class="detail">${f.tags.join(' · ')}</div>
-        </div>
-        <button class="btn-remove" data-id="${f.id}" title="제거">✕</button>
-      </div>`).join('');
-  }
-
-  $btnTest.disabled = selected.length < 2;
+function renderReview() {
+  const list = fabrics.filter(f=>selected.has(f.id));
+  $('#selected-summary').innerHTML = `<div class="count">${list.length}</div><div class="label">개 원단 선택됨 · 2~5개 선택</div><label class="purpose-label">제작 목적<input id="purpose" maxlength="200" required value="${escape(purpose)}" placeholder="예: 셔츠 제작"></label>`;
+  $('#purpose').addEventListener('input', e=>{ purpose=e.target.value; invalidate(); updateAnalyzeButton(); });
+  $('#selected-fabrics').innerHTML = list.map(f => {
+    const sample = samples.get(f.id);
+    return `<article class="sample-card" data-id="${escape(f.id)}"><div class="selected-item"><div class="info"><div class="name">${escape(f.name)}</div><div class="detail">${escape(f.summary)}</div></div><button class="btn-remove" data-remove="${escape(f.id)}" aria-label="${escape(f.name)} 제거">✕</button></div>
+    <div class="sample-fields"><label>색상 농도<select data-field="color_depth">${[['unknown','미확인'],['dark','진한색'],['medium','중간색'],['light','밝은색']].map(([v,t])=>`<option value="${v}" ${sample.color_depth===v?'selected':''}>${t}</option>`).join('')}</select></label>
+    <label>사전 세탁<select data-field="prewashed">${[['unknown','미확인'],['true','완료'],['false','미실시']].map(([v,t])=>`<option value="${v}" ${String(sample.prewashed??'unknown')===v?'selected':''}>${t}</option>`).join('')}</select></label></div>
+    <details><summary>연구 근거와 출처</summary><p>실제 소유 시료의 측정값이 아닌 참고 연구입니다.</p><p>미확인 정보: ${escape(f.data_gaps.join(' · '))}</p><ul>${sourceList(f.source_ids)}</ul><button class="btn btn-ghost" data-evidence="${escape(f.id)}">연구 상세 조회</button><div class="evidence-content"></div></details></article>`;
+  }).join('') || '<p>선택된 원단이 없습니다.</p>';
+  updateAnalyzeButton();
 }
-
-$selectedList.addEventListener('click', (e) => {
-  const btn = e.target.closest('.btn-remove');
-  if (!btn) return;
-  selectedIds.delete(Number(btn.dataset.id));
-  renderFabricList();
-  renderSelectedView();
-  updateFloatingBar();
+let purpose = '원단 조합 검토';
+function updateAnalyzeButton(){ $('#btn-test').disabled = busy || selected.size < 2 || selected.size > 5 || !purpose.trim(); }
+$('#selected-fabrics').addEventListener('change',e=>{
+  const field=e.target.dataset.field; if(!field)return;
+  const id=e.target.closest('[data-id]').dataset.id;
+  samples.get(id)[field]=field==='prewashed'?(e.target.value==='unknown'?null:e.target.value==='true'):e.target.value;
+  invalidate();
 });
-
-$('#btn-clear') && document.addEventListener('click', (e) => {
-  if (e.target.id === 'btn-clear') {
-    selectedIds.clear();
-    renderFabricList(); renderSelectedView(); updateFloatingBar();
-  }
+$('#selected-fabrics').addEventListener('click',async e=>{
+  const remove=e.target.closest('[data-remove]');
+  if(remove){selected.delete(remove.dataset.remove);invalidate();renderFabrics();renderReview();return;}
+  const btn=e.target.closest('[data-evidence]'); if(!btn)return;
+  const target=btn.parentElement.querySelector('.evidence-content');
+  btn.disabled=true; target.textContent='연구 근거 조회 중...';
+  try {
+    const records=await API.getEvidence(btn.dataset.evidence);
+    target.innerHTML=records.map(r=>`<section class="evidence-record"><strong>${escape(r.property)}</strong><p>연구 시료: ${escape(r.sample_description)}</p><pre>${json(r.reported_value)}</pre><p>연구 조건</p><pre>${json(r.conditions)}</pre><p>${escape(r.applicability)}</p><ul>${sourceList([r.source_id])}</ul></section>`).join('') || '<p>등록된 연구 근거가 없습니다.</p>';
+  } catch(error){target.textContent=`조회 실패: ${error.message}`;} finally{btn.disabled=false;}
 });
-
-
-// ============================================================
-//  ③ 호환성 분석 실행 + 렌더
-// ============================================================
-$btnTest.addEventListener('click', async () => {
-  switchStep('compat');
-
-  // 로딩
-  $compatContent.innerHTML = `
-    <div class="loading-state">
-      <div class="spinner"></div>
-      <p>호환성 분석 중...</p>
-    </div>`;
-
-  // API 호출 (→ 추후 fetch로 교체)
-  compatResult = await API.analyzeCompatibility([...selectedIds]);
-
-  // 필요 테스트 가이드도 함께 조회
-  testGuides = await API.getTestGuides(compatResult.pairs);
-  testInputs = {};
-
-  renderCompatResult();
-});
-
-function renderCompatResult() {
-  const { fabrics, pairs, avgScore } = compatResult;
-
-  let grade, gradeLabel;
-  if (avgScore >= 80)      { grade = '🟢'; gradeLabel = '우수'; }
-  else if (avgScore >= 60) { grade = '🟡'; gradeLabel = '보통'; }
-  else                     { grade = '🔴'; gradeLabel = '주의'; }
-
-  let h = '';
-
-  // 조합 칩
-  h += `<div class="combo-chips">`;
-  fabrics.forEach((f, i) => {
-    if (i > 0) h += `<span class="combo-plus">+</span>`;
-    h += `<span class="combo-chip"><span class="chip-dot" style="background:${f.color}"></span>${f.name}</span>`;
-  });
-  h += `</div>`;
-
-  // 헤더
-  h += `
-    <div class="result-header">
-      <div class="result-grade">${grade}</div>
-      <div class="result-title">조합 적합도: ${gradeLabel} (${avgScore}점)</div>
-      <div class="result-subtitle">${fabrics.length}종 원단 · ${pairs.length}개 조합 분석 완료</div>
-    </div>`;
-
-  // 점수 바
-  const cats = [
-    { label: '종합 점수', value: avgScore },
-    { label: '세탁 호환', value: clamp(avgScore + rand(-7,8)) },
-    { label: '내구성',    value: clamp(avgScore + rand(-5,10)) },
-    { label: '봉제 적합', value: clamp(avgScore + rand(-8,6)) },
-  ];
-  h += `<div class="score-bar-container">`;
-  cats.forEach(c => {
-    const cls = c.value >= 70 ? 'high' : c.value >= 50 ? 'mid' : 'low';
-    h += `
-      <div class="score-row">
-        <span class="score-label">${c.label}</span>
-        <div class="score-track"><div class="score-fill ${cls}" style="width:${c.value}%"></div></div>
-        <span class="score-value">${c.value}</span>
-      </div>`;
-  });
-  h += `</div>`;
-
-  // 쌍별 상세
-  h += `<div class="pair-section"><div class="section-title">📊 원단 쌍별 호환성</div>`;
-  pairs.forEach(p => {
-    const badgeCls = p.level === 'good' ? 'good' : p.level === 'bad' ? 'bad' : 'caution';
-    const badgeTxt = p.level === 'good' ? '양호' : p.level === 'bad' ? '비추천' : '주의';
-    h += `
-      <div class="pair-card">
-        <div class="pair-names">
-          ${p.nameA} ↔ ${p.nameB}
-          <span class="compat-badge ${badgeCls}">${badgeTxt} ${p.score}점</span>
-        </div>
-        <div class="pair-detail">${p.detail}</div>
-      </div>`;
-  });
-  h += `</div>`;
-
-  // 다음 스텝 버튼
-  h += `
-    <div class="action-bar">
-      <button class="btn btn-ghost" onclick="switchStep('review')">← 선택 조회</button>
-      <button class="btn btn-primary" onclick="switchStep('guide')">테스트 가이드 →</button>
-    </div>`;
-
-  $compatContent.innerHTML = h;
+$('#btn-test').addEventListener('click',analyze);
+async function analyze(){
+  if(busy || selected.size<2 || !purpose.trim())return;
+  analysis=null;
+  switchStep('review');
+  currentStep='compat';
+  $$('.tab-panel').forEach(p=>p.classList.toggle('active',p.id==='tab-compat'));
+  $$('.step').forEach((p,i)=>{p.classList.toggle('active',i===2);p.classList.toggle('done',i<2);});
+  $('#floating-bar').classList.add('hidden');
+  busy=true; updateAnalyzeButton();
+  $('#compat-content').innerHTML='<div class="loading-state" role="status"><div class="spinner"></div><p>Supabase에서 조합 분석 중...</p></div>';
+  try {
+    analysis=await API.analyze({purpose:purpose.trim(),items:[...selected].map((id,i)=>({fabric_id:id,sample_id:`sample-${i+1}`,...samples.get(id)}))});
+    renderAnalysis();
+    window.dispatchEvent(new CustomEvent('layermatch:analysis',{detail:structuredClone(analysis)}));
+  } catch(error){errorView($('#compat-content'),error,analyze);}
+  finally{busy=false;updateAnalyzeButton();}
 }
-
-
-// ============================================================
-//  ④ 테스트 가이드 + 결과 입력 렌더
-// ============================================================
-function renderGuide() {
-  let h = '';
-
-  h += `
-    <div class="guide-intro">
-      <h2>🧪 테스트 진행 가이드</h2>
-      <p>호환성 분석 결과에 따라 아래 ${testGuides.length}개 테스트를 진행하세요.<br>결과를 입력하면 맞춤 조치를 추천해드립니다.</p>
-    </div>`;
-
-  testGuides.forEach((g, idx) => {
-    const curVal = testInputs[g.id] ?? '';
-    const hasVal = curVal !== '';
-
-    h += `<div class="guide-card" data-test-id="${g.id}">`;
-
-    // 헤더
-    h += `
-      <div class="guide-header">
-        <span class="guide-icon">${g.icon}</span>
-        <span class="guide-title">${idx + 1}. ${g.name}</span>
-      </div>
-      <div class="guide-desc">${g.desc}</div>`;
-
-    // 방법
-    h += `
-      <div class="guide-method">
-        <div class="guide-method-label">시험 방법</div>
-        ${g.method}
-      </div>`;
-
-    // 입력
-    h += `<div class="guide-input-group">`;
-    h += `<label>${g.inputLabel || g.name + ' 결과'}:</label>`;
-
-    if (g.inputType === 'number') {
-      h += `<input type="number" step="any" class="test-input" data-test-id="${g.id}" value="${curVal}" placeholder="측정값 입력" />`;
-      if (g.unit) h += `<span class="input-unit">${g.unit}</span>`;
-    } else if (g.inputType === 'select') {
-      h += `<select class="test-input" data-test-id="${g.id}">`;
-      h += `<option value="">선택하세요</option>`;
-      g.inputOptions.forEach(o => {
-        h += `<option value="${o.value}" ${curVal == o.value ? 'selected' : ''}>${o.label}</option>`;
-      });
-      h += `</select>`;
-    }
-    h += `</div>`;
-
-    // 입력 상태
-    h += `<div class="guide-input-status ${hasVal ? 'valid' : 'empty'}">
-            ${hasVal ? '✓ 입력 완료' : '결과를 입력해주세요'}
-          </div>`;
-
-    h += `</div>`;
-  });
-
-  // 입력 카운트 + 제출 버튼
-  const filledCount = testGuides.filter(g => testInputs[g.id] !== undefined && testInputs[g.id] !== '').length;
-  const allFilled = filledCount === testGuides.length;
-
-  h += `
-    <div style="text-align:center; margin: 16px 0 8px; font-size:13px; color:#6e6e73;">
-      ${filledCount} / ${testGuides.length}개 테스트 결과 입력됨
-    </div>
-    <div class="action-bar">
-      <button class="btn btn-ghost" onclick="switchStep('compat')">← 호환성 결과</button>
-      <button class="btn btn-primary" id="btn-submit-tests" ${allFilled ? '' : 'disabled'}>
-        📋 조치 추천 받기
-      </button>
-    </div>`;
-
-  $guideContent.innerHTML = h;
-
-  // 이벤트 바인딩: 입력 변경
-  $$('.test-input').forEach(el => {
-    el.addEventListener('input', onTestInput);
-    el.addEventListener('change', onTestInput);
-  });
-
-  // 이벤트 바인딩: 제출
-  const btnSubmit = $('#btn-submit-tests');
-  if (btnSubmit) btnSubmit.addEventListener('click', submitTests);
+function renderAnalysis(){
+  const labels={insufficient_data:'실측 정보 부족',needs_testing:'추가 테스트 필요',no_rule_triggered:'현재 규칙의 주의 조건 없음'};
+  $('#compat-content').innerHTML=`<div class="result-header"><div class="result-title">${escape(labels[analysis.status] || analysis.status)}</div><p>${escape(analysis.purpose)}</p><p>현재 분석은 안전·생산 가능 여부를 확정하지 않습니다.</p></div>
+  <div class="combo-chips">${analysis.fabric_snapshots.map(f=>`<span class="combo-chip">${escape(f.name)}</span>`).join('')}</div>
+  <p>수축률 차이: ${analysis.shrinkage_difference_pp===null?'동일 조건 실측 정보가 없어 비교 불가':`${escape(analysis.shrinkage_difference_pp)}%포인트`}</p>
+  <h2 class="section-title">확인할 사항</h2>${analysis.warnings.map(w=>`<article class="pair-card"><p>${escape(w.message)}</p>${w.rule_status?`<small>규칙 상태: ${escape(w.rule_status)}</small>`:''}<ul>${sourceList(w.source_ids)}</ul></article>`).join('') || '<p>현재 규칙이 발동하지 않았습니다. 안전 판정은 아닙니다.</p>'}
+  <details open><summary>미확인 정보 (${analysis.unknown_fields.length})</summary><ul>${analysis.unknown_fields.map(u=>`<li>${escape(u.sample_id ? u.sample_id.replace('sample-','시료 ') : '')} ${escape(fieldNames[u.field] || u.field)} ${escape(u.reason || '')}</li>`).join('')}</ul></details>
+  <h2 class="section-title">권장 테스트 종류</h2>${analysis.recommended_tests.map(t=>`<article class="pair-card"><strong>${escape(testNames[t.test_type] || t.test_type)}</strong><p>${escape(t.reason)}</p></article>`).join('')}
+  <p class="integration-note">${escape(analysis.disclaimer)}<br>${escape(analysis.purpose_usage)}<br>규칙 버전: ${escape(analysis.rule_version)} · 실측 기준: 사용자 보고값만 사용</p>
+  <div class="action-bar"><button class="btn btn-ghost" data-back>← 선택 조회</button><button class="btn btn-primary" data-guide>테스트 가이드 →</button></div>`;
+  $('#compat-content [data-back]').addEventListener('click',()=>switchStep('review'));
+  $('#compat-content [data-guide]').addEventListener('click',()=>switchStep('guide'));
 }
-
-function onTestInput(e) {
-  const testId = e.target.dataset.testId;
-  testInputs[testId] = e.target.value;
-  renderGuide(); // 상태 갱신 (입력값 유지됨)
+function renderHandoff(step){
+  const target=step==='guide'?$('#guide-content'):$('#action-content');
+  target.innerHTML=`<div class="guide-intro"><h2>${step==='guide'?'테스트 가이드 연결':'조치 추천 연결'}</h2><p>상세 가이드·결과 저장·조치 추천은 팀 담당자의 백엔드 연결 후 제공됩니다.</p></div>
+  ${analysis.recommended_tests.map(t=>`<article class="pair-card"><strong>${escape(testNames[t.test_type] || t.test_type)}</strong><p>${escape(t.reason)}</p></article>`).join('')}
+  <div class="action-bar"><button class="btn btn-ghost" data-back>← 분석 결과</button></div>`;
+  target.querySelector('[data-back]').addEventListener('click',()=>switchStep('compat'));
 }
-
-// 가이드 탭이 활성화될 때 렌더
-const origSwitch = switchStep;
-// switchStep을 확장
-const _switchStep = switchStep;
-
-
-// ============================================================
-//  ⑤ 테스트 결과 제출 → 조치 추천
-// ============================================================
-async function submitTests() {
-  switchStep('action');
-
-  $actionContent.innerHTML = `
-    <div class="loading-state">
-      <div class="spinner"></div>
-      <p>테스트 결과를 분석하고 조치를 생성 중...</p>
-    </div>`;
-
-  // 입력값 정리
-  const results = testGuides
-    .filter(g => testInputs[g.id] !== undefined && testInputs[g.id] !== '')
-    .map(g => ({ testId: g.id, value: testInputs[g.id] }));
-
-  // API: 결과 저장
-  const sessionId = `session_${Date.now()}`;
-  await API.saveTestResults(sessionId, results);
-
-  // API: 조치 추천 조회
-  const actions = await API.getActionRecommendations(results);
-
-  renderActions(actions);
+// Team integration: full server response and recommended_tests[].test_type, no mock save.
+window.LayerMatch=Object.freeze({getAnalysis:()=>analysis?structuredClone(analysis):null});
+async function init(){
+  $('#fabric-list').innerHTML='<p role="status">Supabase 원단 목록 조회 중...</p>';
+  try{[fabrics,sources]=await Promise.all([API.listFabrics(),API.listSources()]);renderFabrics();}
+  catch(error){errorView($('#fabric-list'),error,init);}
 }
-
-function renderActions(actions) {
-  let h = '';
-
-  // 요약 카운트
-  const successCount = actions.filter(a => a.level === 'success').length;
-  const warningCount = actions.filter(a => a.level === 'warning').length;
-  const dangerCount  = actions.filter(a => a.level === 'danger').length;
-
-  // 최종 판정
-  let verdictIcon, verdictTitle, verdictDesc;
-  if (dangerCount === 0 && warningCount === 0) {
-    verdictIcon  = '🎉';
-    verdictTitle = '모든 테스트 통과!';
-    verdictDesc  = '선택하신 원단 조합은 모든 테스트 항목에서 양호한 결과를 보였습니다. 생산 진행이 가능합니다.';
-  } else if (dangerCount === 0) {
-    verdictIcon  = '⚠️';
-    verdictTitle = '조건부 생산 가능';
-    verdictDesc  = '일부 항목에서 주의가 필요합니다. 아래 권장 조치를 적용한 후 생산을 진행하세요.';
-  } else {
-    verdictIcon  = '🚫';
-    verdictTitle = '생산 전 조치 필수';
-    verdictDesc  = '중요한 문제가 발견되었습니다. 아래 필수 조치 사항을 반드시 이행한 후 재테스트하세요.';
-  }
-
-  h += `
-    <div class="final-verdict">
-      <div class="verdict-icon">${verdictIcon}</div>
-      <div class="verdict-title">${verdictTitle}</div>
-      <div class="verdict-desc">${verdictDesc}</div>
-    </div>`;
-
-  // 요약 칩
-  h += `<div class="action-summary-bar">`;
-  if (successCount) h += `<span class="action-summary-chip success">✅ 양호 ${successCount}</span>`;
-  if (warningCount) h += `<span class="action-summary-chip warning">⚠️ 주의 ${warningCount}</span>`;
-  if (dangerCount)  h += `<span class="action-summary-chip danger">🚫 위험 ${dangerCount}</span>`;
-  h += `</div>`;
-
-  // 위험 → 주의 → 양호 순 정렬
-  const order = { danger: 0, warning: 1, success: 2 };
-  const sorted = [...actions].sort((a, b) => (order[a.level] ?? 9) - (order[b.level] ?? 9));
-
-  // 조치 카드
-  sorted.forEach(a => {
-    h += `
-      <div class="rec-card rec-${a.level}">
-        <div class="rec-icon">${a.icon}</div>
-        <div class="rec-body">
-          <div class="rec-test-name">${a.testName}</div>
-          <div class="rec-title">${a.title}</div>
-          <div class="rec-desc">${a.desc}</div>
-          <div class="rec-input-val">측정값: ${a.inputValue} ${a.inputUnit}</div>
-        </div>
-      </div>`;
-  });
-
-  // 하단 액션
-  h += `
-    <div class="action-bar" style="margin-top:24px;">
-      <button class="btn btn-ghost" onclick="switchStep('guide')">← 테스트 수정</button>
-      <button class="btn btn-secondary" onclick="restartAll()">🔄 처음부터</button>
-    </div>`;
-
-  $actionContent.innerHTML = h;
-}
-
-
-// ============================================================
-//  유틸
-// ============================================================
-function updateFloatingBar() {
-  $selectedCount.textContent = selectedIds.size;
-  $floatingBar.classList.toggle('hidden', selectedIds.size === 0 || currentStep !== 'select');
-}
-
-function restartAll() {
-  selectedIds.clear();
-  compatResult = null;
-  testGuides = [];
-  testInputs = {};
-  renderFabricList();
-  renderSelectedView();
-  updateFloatingBar();
-  switchStep('select');
-}
-
-function clamp(v) { return Math.max(0, Math.min(100, Math.round(v))); }
-function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
-
-
-// ============================================================
-//  switchStep 오버라이드 — guide 탭 진입 시 렌더
-// ============================================================
-const _origSwitchStep = switchStep;
-// 이미 정의된 switchStep을 래핑 — guide 진입 시 renderGuide 호출
-const __origSS = window.switchStep || switchStep;
-
-// switchStep을 재정의하지 않고 MutationObserver로 대응
-// 대신, 탭 전환 시 guide를 렌더하는 로직을 switchStep에 직접 포함
-// → switchStep은 이미 전역이므로 아래처럼 재할당
-
-(function patchSwitchStep() {
-  const original = switchStep;
-  window.switchStep = function(stepName) {
-    original(stepName);
-    if (stepName === 'guide') renderGuide();
-  };
-})();
-
-
-// ============================================================
-//  초기화
-// ============================================================
-(async function init() {
-  fabricsCache = await API.getFabrics();
-  renderFabricList();
-  renderSelectedView();
-})();
+init();

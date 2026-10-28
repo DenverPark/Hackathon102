@@ -1,201 +1,40 @@
-# 🧵 원단 조합 테스트 서비스
+# 원단 조합 테스트 — Supabase 연동
 
-원단을 선택하고 조합 적합성을 분석한 후, 테스트 가이드와 맞춤 조치를 추천받을 수 있는 웹 서비스입니다.
+작업 브랜치: `feature/supabase-integration` (2026-10-28 사용자 지침). 이후 제작·수정도 이 브랜치에서 진행하며 main 반영은 별도 요청 후 진행합니다.
 
-## 📋 주요 기능
+## 실행
 
-| 단계 | 기능 | 설명 |
-|:----:|------|------|
-| 1 | **원단 선택** | 보유 원단 중 조합할 원단을 복수 선택 |
-| 2 | **선택 조회** | 선택된 원단 확인 및 편집 |
-| 3 | **호환성 분석** | 원단 쌍별 호환 점수, 종합 적합도 판정 |
-| 4 | **테스트 가이드** | 필요한 물리·화학 테스트 안내 + 결과 입력 |
-| 5 | **조치 추천** | 테스트 결과 기반 맞춤 생산 조치 추천 |
-
-## 🚀 시작하기
-
-### 바로 실행 (정적 파일)
-
-별도 설치 없이 `index.html`을 브라우저에서 열면 바로 사용 가능합니다.
-
-```bash
-# 방법 1: 파일을 직접 열기
-open index.html        # macOS
-start index.html       # Windows
-xdg-open index.html    # Linux
-
-# 방법 2: 로컬 서버로 실행
-npx serve .
-# 또는
-python -m http.server 8000
+```sh
+python -m http.server 8102 --bind 127.0.0.1
 ```
 
-### 개발 서버
+브라우저에서 http://127.0.0.1:8102/ 를 엽니다. ES module을 사용하므로 index.html을 파일로 직접 열지 마세요. 별도 패키지 설치는 필요 없습니다.
 
-```bash
-npm install
-npm start
+## 실제 연결
+
+- 프로젝트: `czxcnvgbrrakyydtdhgh`
+- 목록/상세: `lm_fabrics`, 원단 연구 근거: `lm_evidence`, 출처: `lm_sources`
+- 분석: `lm_analyze` RPC, 길이 계산 클라이언트: `lm_shrinkage` RPC
+- 브라우저용 공개 설정: `config.js`. publishable 키는 공개 사용 가능한 키이며 secret/service_role 키는 절대 넣지 않습니다.
+- 기존 DB는 변경하지 않았습니다. `backend/supabase/`는 이미 적용한 SQL의 인계용 사본입니다. 기존 프로젝트에 초기화 SQL을 재실행하지 마세요.
+
+현재 DB 프로필 2개를 표시합니다. 실제 시료의 측정 데이터가 없으므로 연구 값을 자동 입력하거나 임의 점수를 생성하지 않습니다. 색상 농도·사전세탁 미확인을 null/unknown으로 전달하며, 서버의 정보 부족·주의사항·권장 테스트·규칙 버전·연구 적용 한계를 그대로 표시합니다.
+
+## 팀 연결 계약
+
+담당 범위는 원단 선택·조회·조합 분석입니다. 상세 테스트 가이드, 결과 저장, 조치 추천, AI 챗봇은 해당 담당자의 API를 연결해야 합니다. 이전 임시 가이드·가짜 저장 성공 및 생산 가능 판정은 실제 API 연결로 오인되지 않도록 연결 대기 화면으로 바꿨습니다.
+
+- `window.LayerMatch.getAnalysis()`는 전체 분석 응답의 복사본 또는 null을 반환합니다.
+- 분석 완료 시 `window`에 `layermatch:analysis` CustomEvent가 발생하며 `event.detail`에 전체 응답이 담깁니다.
+- `recommended_tests[].test_type`: `shrinkage`, `staining`. 가이드 상세 ID가 아닌 분류 코드입니다.
+- 원단·목적·시료 정보 수정 시 이전 분석 응답을 무효화합니다.
+- API 계약: `backend/API.md`, 연구 검토: `backend/SOURCE_REVIEW.md`.
+
+## 검증
+
+```sh
+npm test
+npm run test:live
 ```
 
-## 🗂️ 프로젝트 구조
-
-```
-fabric-combo-test/
-├── index.html          # 메인 HTML (5단계 SPA)
-├── style.css           # 스타일시트
-├── api.js              # 데이터 액세스 레이어 (DB 연동 대비)
-├── app.js              # UI 컨트롤러
-├── package.json        # npm 설정
-├── .gitignore
-├── LICENSE
-└── README.md
-```
-
-## 🗄️ DB 연동 가이드
-
-`api.js`의 모든 함수는 `Promise`를 반환하여 백엔드 API로 교체가 용이합니다.
-
-### 테이블 설계
-
-```sql
--- 원단 마스터
-CREATE TABLE fabrics (
-    id          INT PRIMARY KEY AUTO_INCREMENT,
-    name        VARCHAR(100) NOT NULL,
-    color       VARCHAR(7),
-    description TEXT,
-    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 원단 태그
-CREATE TABLE fabric_tags (
-    id        INT PRIMARY KEY AUTO_INCREMENT,
-    fabric_id INT NOT NULL,
-    tag       VARCHAR(50) NOT NULL,
-    FOREIGN KEY (fabric_id) REFERENCES fabrics(id)
-);
-
--- 원단 쌍별 호환성
-CREATE TABLE compatibility (
-    fabric_a_id  INT NOT NULL,
-    fabric_b_id  INT NOT NULL,
-    score        INT NOT NULL CHECK (score BETWEEN 0 AND 100),
-    level        ENUM('good', 'caution', 'bad') NOT NULL,
-    summary      VARCHAR(200),
-    detail       TEXT,
-    PRIMARY KEY (fabric_a_id, fabric_b_id),
-    FOREIGN KEY (fabric_a_id) REFERENCES fabrics(id),
-    FOREIGN KEY (fabric_b_id) REFERENCES fabrics(id)
-);
-
--- 테스트 가이드 마스터
-CREATE TABLE test_guides (
-    id           VARCHAR(50) PRIMARY KEY,
-    name         VARCHAR(100) NOT NULL,
-    icon         VARCHAR(10),
-    description  TEXT,
-    method       TEXT,
-    unit         VARCHAR(20),
-    input_type   ENUM('number', 'select') NOT NULL,
-    threshold_good    DECIMAL(10,2),
-    threshold_caution DECIMAL(10,2)
-);
-
--- 테스트 입력 옵션 (select 타입용)
-CREATE TABLE test_input_options (
-    id        INT PRIMARY KEY AUTO_INCREMENT,
-    test_id   VARCHAR(50) NOT NULL,
-    value     VARCHAR(50) NOT NULL,
-    label     VARCHAR(200) NOT NULL,
-    sort_order INT DEFAULT 0,
-    FOREIGN KEY (test_id) REFERENCES test_guides(id)
-);
-
--- 테스트-호환성 조건 매핑
-CREATE TABLE test_conditions (
-    id        INT PRIMARY KEY AUTO_INCREMENT,
-    test_id   VARCHAR(50) NOT NULL,
-    keyword   VARCHAR(100),
-    level     ENUM('good', 'caution', 'bad'),
-    FOREIGN KEY (test_id) REFERENCES test_guides(id)
-);
-
--- 조치 추천 규칙
-CREATE TABLE action_rules (
-    id         INT PRIMARY KEY AUTO_INCREMENT,
-    test_id    VARCHAR(50) NOT NULL,
-    min_value  DECIMAL(10,2),
-    max_value  DECIMAL(10,2),
-    level      ENUM('success', 'warning', 'danger') NOT NULL,
-    icon       VARCHAR(10),
-    title      VARCHAR(200) NOT NULL,
-    description TEXT,
-    FOREIGN KEY (test_id) REFERENCES test_guides(id)
-);
-
--- 테스트 결과 기록 (세션별)
-CREATE TABLE test_results (
-    id          INT PRIMARY KEY AUTO_INCREMENT,
-    session_id  VARCHAR(100) NOT NULL,
-    test_id     VARCHAR(50) NOT NULL,
-    value       DECIMAL(10,2) NOT NULL,
-    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (test_id) REFERENCES test_guides(id)
-);
-
--- 세션 정보 (어떤 원단 조합으로 테스트했는지)
-CREATE TABLE test_sessions (
-    session_id  VARCHAR(100) PRIMARY KEY,
-    fabric_ids  JSON NOT NULL,
-    avg_score   INT,
-    verdict     ENUM('pass', 'conditional', 'fail'),
-    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-### API 교체 예시
-
-```js
-// 현재 (Mock)
-function getFabrics() {
-  return Promise.resolve(structuredClone(_fabrics));
-}
-
-// 실제 백엔드 연동
-function getFabrics() {
-  return fetch('/api/fabrics').then(r => r.json());
-}
-```
-
-### API 엔드포인트 명세
-
-| Method | Endpoint | 설명 |
-|--------|----------|------|
-| `GET` | `/api/fabrics` | 전체 원단 목록 |
-| `GET` | `/api/fabrics?ids=1,2,3` | ID로 원단 조회 |
-| `GET` | `/api/compatibility?a=1&b=2` | 쌍별 호환성 조회 |
-| `POST` | `/api/compatibility/analyze` | 다중 원단 호환성 분석 |
-| `POST` | `/api/test-guides` | 필요 테스트 조회 |
-| `POST` | `/api/actions/recommend` | 조치 추천 조회 |
-| `POST` | `/api/test-results` | 테스트 결과 저장 |
-
-## 🛠️ 기술 스택
-
-- **Frontend**: Vanilla HTML / CSS / JavaScript (프레임워크 없음)
-- **아키텍처**: 데이터 레이어 분리 (api.js) — REST API 교체 용이
-- **DB 대비**: 모든 데이터 접근 Promise 기반 비동기 처리
-
-## 📦 지원 원단
-
-| 원단 | 분류 | 특성 |
-|------|------|------|
-| 나일론 | 합성 | 경량, 고강도 |
-| 울 | 천연 | 보온, 중량 |
-| 데님 | 천연 | 능직, 중량 |
-| 코튼 폴리에스터 블렌드 | 혼방 | 실용, 중량 |
-| 면직물 | 천연 | 통기성, 중량 |
-| 폴리에스터 | 합성 | 경량, 속건 |
-
-## 📄 라이선스
-
-[MIT License](LICENSE)
+단위 테스트 12개, 실제 Supabase HTTP 읽기·계산 검증 9개 통과. live 테스트는 조회와 계산만 수행합니다. 결과 파일은 gitignore 대상입니다.

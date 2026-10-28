@@ -1,0 +1,3 @@
+project_id = "layermatch"
+# Scope: catalogue and analysis via Supabase Data API / Postgres RPC only.
+# No Edge Functions, chatbot, result history or guide-detail implementation.
