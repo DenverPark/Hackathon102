@@ -195,12 +195,13 @@ function renderHandoff(step){
   <label>접합부 변화 관찰<select name="grade" required><option value="">관찰 결과 선택</option>${[['5','5 — 변화 없음'],['4','4 — 약간의 변화'],['3','3 — 눈에 띄는 변화'],['2','2 — 큰 변형'],['1','1 — 접합부 분리 또는 파손']].map(([v,label])=>`<option value="${v}" ${washResult.grade===v?'selected':''}>${label}</option>`).join('')}</select></label>
   <label>세탁 횟수<input name="cycles" type="number" min="1" max="100" step="1" placeholder="예: 1" value="${escape(washResult.cycles||'')}"></label><label>세탁 온도 (℃)<input name="temperature" type="number" min="0" max="100" step="0.1" placeholder="실제 사용한 온도" value="${escape(washResult.temperature||'')}"></label>
   <label>세탁·건조 방식 및 관찰 내용<textarea name="notes" rows="3" maxlength="1000" placeholder="세제, 세탁 방식, 건조 방법과 변화 등을 기록하세요">${escape(washResult.notes||'')}</textarea></label><button type="submit" class="btn btn-primary">입력 결과 확인</button><p id="wash-status" role="status" aria-live="polite">${washResult.confirmed?'입력한 결과를 확인했습니다. 이 탭에서만 유지됩니다.':''}</p></form></article>
-  <div class="action-bar"><button class="btn btn-ghost" data-back>← 호환성 결과</button></div>`;
+  <div class="action-bar"><button class="btn btn-ghost" data-back>← 호환성 결과</button><button class="btn btn-primary" data-next>조치 추천 →</button></div>`;
   const form=target.querySelector('#wash-form');
   form.addEventListener('input',()=>{washResult={...washResult,...Object.fromEntries(new FormData(form)),confirmed:false};target.querySelector('#wash-status').textContent='';});
   form.addEventListener('change',()=>{washResult={...washResult,...Object.fromEntries(new FormData(form)),confirmed:false};target.querySelector('#wash-status').textContent='';});
   form.addEventListener('submit',e=>{e.preventDefault();if(!form.reportValidity())return;washResult={...Object.fromEntries(new FormData(form)),confirmed:true};target.querySelector('#wash-status').textContent='입력한 결과를 확인했습니다. 이 탭에서만 유지됩니다.';});
   target.querySelector('[data-back]').addEventListener('click',()=>switchStep('compat'));
+  target.querySelector('[data-next]').addEventListener('click',()=>switchStep('action'));
 }
 // Team integration: full server response and recommended_tests[].test_type, no mock save.
 window.LayerMatch=Object.freeze({getAnalysis:()=>analysis?structuredClone(analysis):null});
