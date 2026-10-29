@@ -490,3 +490,6 @@ html { scroll-padding-bottom: 100px; }
   .review-actions { padding: 7px 10px; bottom: 6px; }
   #selected-fabrics, #tab-compat .compat-method { margin-bottom: 24px; }
 }
+
+.home-link { font: inherit; color: inherit; background: none; border: 0; padding: 3px; cursor: pointer; }
+.home-link:focus-visible { outline: 3px solid #166fd1; outline-offset: 3px; border-radius: 6px; }

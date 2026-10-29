@@ -43,6 +43,7 @@ function switchStep(step) {
   if (step === 'guide' || step === 'action') renderHandoff(step);
 }
 window.switchStep = switchStep;
+$('#home-link').addEventListener('click',()=>{ if (!busy) { switchStep('select'); window.scrollTo({top:0,behavior:'smooth'}); } });
 $$('.step').forEach(el => el.addEventListener('click',() => {
   if (steps.indexOf(el.dataset.step) <= steps.indexOf(currentStep)) switchStep(el.dataset.step);
 }));
