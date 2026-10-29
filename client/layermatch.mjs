@@ -25,6 +25,7 @@ export function createLayerMatchClient({url,key,getAccessToken=async()=>null,fet
   analyze:payload=>request('/rest/v1/rpc/lm_analyze',{payload}),
   analyzeScored:payload=>request('/rest/v1/rpc/lm_analyze_scored',{payload}),
   analyzeCatalogue:fabricIds=>request('/rest/v1/rpc/lm_analyze_catalogue',{fabric_ids:fabricIds}),
+  analyzeEvidence:fabricIds=>request('/rest/v1/rpc/lm_analyze_evidence',{fabric_ids:fabricIds}),
   calculateShrinkage:(before,after)=>request('/rest/v1/rpc/lm_shrinkage',{before_length:before,after_length:after})
  };
 }

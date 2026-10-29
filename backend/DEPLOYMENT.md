@@ -40,3 +40,9 @@
 - Dashboard SQL Editor에서 updates/catalogue-scoring.sql 적용, catalogue_scoring_applied 확인. 기존 RPC와 데이터는 유지.
 - 사용자 입력 없이 카탈로그 분류만 사용하며 점수와 가중치는 검증되지 않은 기획 가정. 이염은 평가 보류.
 - 실제 Supabase에서 등록된 네 원단의 여섯 조합, 순서 변경, 다중 쌍 평균과 잘못된 입력 검증 확인. npm test 15개 통과.
+
+## 2026-10-30 — 표준·논문 근거 평가 v0.7.0
+
+- Supabase Dashboard에서 `backend/updates/evidence-assessment.sql` 적용. 공식 ISO 소개 5건과 국내 논문 초록 2건의 출처, 확인 범위, 한계를 추가하고 기존 데이터와 RPC는 유지했습니다.
+- `lm_analyze_evidence`는 현재 모든 점수를 null로 반환합니다. 원단의 시험값이나 공인 종합 점수를 만들지 않습니다.
+- 실제 API에서 네 원단의 여섯 쌍, 출처 연결, 세 원단과 입력 오류를 확인했습니다.
