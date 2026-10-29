@@ -1,4 +1,4 @@
-import { API } from './api.js?v=0.8.0';
+import { API } from './api.js?v=0.8.1';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => document.querySelectorAll(selector);
@@ -72,7 +72,7 @@ function renderReview() {
   $('#selected-fabrics').innerHTML=list.map((f,index)=>{
     const card=selectionCards.find(c=>c.id===f.id);
     const composition=Object.entries(f.composition).map(([key,value])=>`${({cotton:'면',polyester:'폴리에스터',nylon:'나일론',wool:'울'})[key] || key} ${value}%`).join(' · ') || '혼용률 미확인';
-    const stretch=f.stretch==='non_stretch'?'비신축':f.stretch==='construction_dependent'?'조직에 따라 다름':f.stretch==='unknown'?'미확인':f.stretch;
+    const stretch=f.stretch==='non_stretch'?'비신축':f.stretch==='construction_dependent'?'조직에 따라 다름':f.stretch==='unknown'?'신축성 미확인':f.stretch;
     return `<article class="sample-card" data-id="${escape(f.id)}" aria-label="${escape(card?.name || f.name)} 원단 정보"><header class="review-card-header"><span class="review-swatch" style="background:${card?.color || '#bbb'}" aria-hidden="true"></span><div class="review-card-title"><span class="review-sample-number">원단 ${index+1}</span><h3>${escape(card?.name || f.name)}</h3><p>${escape(composition)}</p></div><button class="review-remove" data-remove="${escape(f.id)}" aria-label="${escape(f.name)} 선택 해제">선택 해제</button></header>
     <div class="review-material-tags"><span>${escape(f.structure || '조직 미확인')}</span><span>${escape(stretch || '신축성 미확인')}</span></div>
     <p class="review-fabric-summary">${escape(f.summary)}</p>
