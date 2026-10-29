@@ -54,3 +54,7 @@
 ## 2026-10-30 — 6종 동시 선택
 
 Dashboard SQL Editor로 `backend/updates/six-fabric-limit.sql`을 적용했습니다. 기존 분석 기준은 유지하고 카탈로그 API의 최대 원단 수만 5에서 6으로 확대했습니다. 실제 API에서 6종·15개 쌍·평균·범위/중복 입력 검증과 화면 흐름을 확인했습니다.
+
+## 2026-10-30 — 이염 참고 점수 v0.9.0
+
+Dashboard SQL Editor로 staining-assumptions.sql을 적용. 데님 포함 여부에 따른 60/70 임의 기획값을 항목별로 표시하며 종합 점수에는 반영하지 않음. 조사 원문 수치를 선택 시료의 실측값으로 쓰지 않음.
