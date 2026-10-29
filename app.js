@@ -1,4 +1,4 @@
-import { API } from './api.js?v=0.8.2';
+import { API } from './api.js?v=0.8.3';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => document.querySelectorAll(selector);
@@ -23,11 +23,21 @@ function errorView(target, error, retry) {
   target.innerHTML = `<div class="empty-state" role="alert"><p>연결에 실패했습니다. ${escape(error.message)}</p><button class="btn btn-primary" data-retry>다시 시도</button></div>`;
   target.querySelector('[data-retry]').addEventListener('click', retry);
 }
+function updateSteps() {
+  const currentIndex=steps.indexOf(currentStep);
+  $$('.step').forEach((button,i)=>{
+    button.classList.toggle('active',i===currentIndex);
+    button.classList.toggle('done',i<currentIndex);
+    button.disabled=busy || i>=currentIndex;
+    if(i===currentIndex) button.setAttribute('aria-current','step');
+    else button.removeAttribute('aria-current');
+  });
+}
 function switchStep(step) {
   if (busy || !steps.includes(step) || (['compat','guide','action'].includes(step) && !analysis)) return;
   currentStep = step;
   $$('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${step}`));
-  $$('.step').forEach((p,i) => { p.classList.toggle('active',i === steps.indexOf(step)); p.classList.toggle('done',i < steps.indexOf(step)); });
+  updateSteps();
   $('#floating-bar').classList.toggle('hidden',step !== 'select' || !selected.size);
   if (step === 'review') renderReview();
   if (step === 'guide' || step === 'action') renderHandoff(step);
@@ -130,16 +140,16 @@ async function analyze(){
   switchStep('review');
   currentStep='compat';
   $$('.tab-panel').forEach(p=>p.classList.toggle('active',p.id==='tab-compat'));
-  $$('.step').forEach((p,i)=>{p.classList.toggle('active',i===2);p.classList.toggle('done',i<2);});
+  updateSteps();
   $('#floating-bar').classList.add('hidden');
-  busy=true; updateAnalyzeButton();
+  busy=true; updateSteps(); updateAnalyzeButton();
   $('#compat-content').innerHTML='<div class="loading-state" role="status"><div class="spinner"></div><p>Supabase에서 조합 분석 중...</p></div>';
   try {
     analysis=await API.analyzeCatalogue([...selected]);
     renderAnalysis();
     window.dispatchEvent(new CustomEvent('layermatch:analysis',{detail:structuredClone(analysis)}));
   } catch(error){errorView($('#compat-content'),error,analyze);}
-  finally{busy=false;updateAnalyzeButton();}
+  finally{busy=false;updateSteps();updateAnalyzeButton();}
 }
 function renderAnalysis(){
   const result=analysis.compatibility;
@@ -171,6 +181,7 @@ function renderHandoff(step){
 // Team integration: full server response and recommended_tests[].test_type, no mock save.
 window.LayerMatch=Object.freeze({getAnalysis:()=>analysis?structuredClone(analysis):null});
 async function init(){
+  updateSteps();
   $('#fabric-list').innerHTML='<p role="status">Supabase 원단 목록 조회 중...</p>';
   try{[fabrics,sources]=await Promise.all([API.listFabrics(),API.listSources()]);renderFabrics();}
   catch(error){errorView($('#fabric-list'),error,init);}

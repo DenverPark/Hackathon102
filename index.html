@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>원단 조합 테스트 서비스</title>
-  <link rel="stylesheet" href="style.css?v=0.8.0">
+  <link rel="stylesheet" href="style.css?v=0.8.3">
 </head>
 <body>
   <div id="app">
@@ -15,17 +15,17 @@
     </header>
 
     <!-- 스텝 인디케이터 -->
-    <div class="step-indicator" id="step-indicator">
-      <div class="step active" data-step="select"><span class="step-num">1</span><span class="step-label">원단 선택</span></div>
+    <nav class="step-indicator" id="step-indicator" aria-label="진행 단계">
+      <button type="button" class="step active" data-step="select" aria-label="원단 선택" aria-current="step"><span class="step-num">1</span><span class="step-label">원단 선택</span></button>
       <div class="step-line"></div>
-      <div class="step" data-step="review"><span class="step-num">2</span><span class="step-label">선택 조회</span></div>
+      <button type="button" class="step" data-step="review" aria-label="선택 조회" disabled><span class="step-num">2</span><span class="step-label">선택 조회</span></button>
       <div class="step-line"></div>
-      <div class="step" data-step="compat"><span class="step-num">3</span><span class="step-label">호환성 결과</span></div>
+      <button type="button" class="step" data-step="compat" aria-label="호환성 결과" disabled><span class="step-num">3</span><span class="step-label">호환성 결과</span></button>
       <div class="step-line"></div>
-      <div class="step" data-step="guide"><span class="step-num">4</span><span class="step-label">테스트 가이드</span></div>
+      <button type="button" class="step" data-step="guide" aria-label="테스트 가이드" disabled><span class="step-num">4</span><span class="step-label">테스트 가이드</span></button>
       <div class="step-line"></div>
-      <div class="step" data-step="action"><span class="step-num">5</span><span class="step-label">조치 추천</span></div>
-    </div>
+      <button type="button" class="step" data-step="action" aria-label="조치 추천" disabled><span class="step-num">5</span><span class="step-label">조치 추천</span></button>
+    </nav>
 
     <!-- ① 원단 선택 -->
     <section id="tab-select" class="tab-panel active">
@@ -65,6 +65,6 @@
     </div>
   </div>
 
-  <script type="module" src="app.js?v=0.8.2"></script>
+  <script type="module" src="app.js?v=0.8.3"></script>
 </body>
 </html>
