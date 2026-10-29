@@ -1,4 +1,4 @@
-import { API } from './api.js?v=0.7.0';
+import { API } from './api.js?v=0.7.1';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => document.querySelectorAll(selector);
@@ -135,7 +135,7 @@ async function analyze(){
   busy=true; updateAnalyzeButton();
   $('#compat-content').innerHTML='<div class="loading-state" role="status"><div class="spinner"></div><p>Supabase에서 조합 분석 중...</p></div>';
   try {
-    analysis=await API.analyzeEvidence([...selected]);
+    analysis=await API.analyzeCatalogue([...selected]);
     renderAnalysis();
     window.dispatchEvent(new CustomEvent('layermatch:analysis',{detail:structuredClone(analysis)}));
   } catch(error){errorView($('#compat-content'),error,analyze);}
@@ -143,14 +143,20 @@ async function analyze(){
 }
 function renderAnalysis(){
   const result=analysis.compatibility;
-  const allIds=['iso-6330-2021','iso-5077-2007','iso-105-c06-2010','iso-105-a03-2019','iso-13935-1-2014','kci-seam-cut-2013','kci-lining-seam-2005'];
-  const name=id=>selectionCards.find(c=>c.id===id)?.name || analysis.fabric_snapshots.find(f=>f.fabric_id===id)?.name || id;
+  if(!result){errorView($('#compat-content'),new Error('조합 결과를 확인할 수 없습니다.'),analyze);return;}
+  const score=value=>value===null || value===undefined?null:Math.max(0,Math.min(100,Number(value)));
+  const metricValue=value=>score(value)===null?'<span class="compat-pending">평가 보류</span>':`${escape(score(value))}<small>점</small>`;
+  const fabricChip=f=>{const card=selectionCards.find(c=>c.id===f.fabric_id);return `<span class="result-fabric-chip"><i style="background:${card?.color || '#bbb'}"></i>${escape(card?.name || f.name)}</span>`;};
+  const explanations={shrinkage:'소재 분류별 반응 가정',stretch:'DB에 등록된 신축 분류',care:'소재별 관리 조건의 확인 필요성',staining:'색상·염색 정보가 없어 평가 보류'};
+  const warnings=[...new Map(analysis.warnings.map(w=>[w.code,w])).values()];
   $('#compat-content').innerHTML=`<div class="compat-intro"><span class="review-eyebrow">조합 분석 결과</span><h2>제작 전, 함께 확인해보세요</h2><p>${analysis.fabric_snapshots.length}개 원단 · ${result.pairs.length}개 조합</p></div>
-  <div class="result-fabric-chips">${analysis.fabric_snapshots.map(f=>`<span class="result-fabric-chip">${escape(name(f.fabric_id))}</span>`).join('<span class="result-plus">+</span>')}</div>
-  <section class="compat-hero"><div class="compat-score-ring" style="--score:0"><div><strong>—</strong><span>점수 보류</span></div></div><div class="compat-hero-copy"><span class="compat-draft">표준 시험 기준 참고</span><h3>조합 적합도</h3><span class="compat-status">시험 자료 부족</span><p>선택한 실제 원단의 비교 가능한 시험 결과가 없어 점수를 산정하지 않습니다.</p><div class="compat-coverage"><span>근거 수준</span><strong>미확인</strong></div></div></section>
-  <section class="compat-metrics"><div class="compat-section-heading"><h3>확인할 시험 항목</h3><span>실제 시료 시험 필요</span></div>${result.dimensions.map(d=>`<div class="compat-metric"><div class="compat-metric-label"><strong>${escape(d.label)}</strong><small>${escape(d.reason)}</small></div><div class="compat-track compat-track-pending"></div><span class="compat-metric-score"><span class="compat-pending">평가 보류</span></span></div>`).join('')}</section>
-  <section class="compat-pairs"><div class="compat-section-heading"><h3>원단 쌍별 확인</h3><span>${result.pairs.length}개 조합</span></div>${result.pairs.map(pair=>`<article class="compat-pair"><div class="compat-pair-heading"><div>${pair.fabric_ids.map(id=>escape(name(id))).join(' ↔ ')}</div><strong class="compat-pending">평가 보류</strong></div><p class="compat-pair-meta">실제 시료 시험 자료가 필요합니다.</p><details><summary>시험 항목과 근거</summary><div class="compat-pair-evidence">${pair.dimensions.map(d=>`<div><strong>${escape(d.label)}</strong><p>${escape(d.reason)}</p><ul>${sourceList(d.source_ids)}</ul></div>`).join('')}</div></details></article>`).join('')}</section>
-  <details class="compat-method"><summary>표준 시험과 점수 산출 범위</summary><div><p>${escape(result.disclaimer)}</p><p>치수 변화는 동일한 세탁·건조 조건과 측정 방향에서 각각 비교합니다. 이염과 봉합강도는 실제 시편 시험을 확인합니다. 표준의 절차와 제품별 합격 기준은 다릅니다.</p><ul>${sourceList(allIds)}</ul><p>공식 표준 소개와 국내 논문의 초록을 확인했으며 표준 원문 전체나 선택 원단의 실측값을 확보한 것은 아닙니다.</p></div></details>
+  <div class="result-fabric-chips">${analysis.fabric_snapshots.map(fabricChip).join('<span class="result-plus">+</span>')}</div>
+  <section class="compat-hero"><div class="compat-score-ring" style="--score:${score(result.score) ?? 0}"><div><strong>${score(result.score)===null?'—':escape(score(result.score))}</strong><span>${score(result.score)===null?'점수 보류':'/ 100점'}</span></div></div><div class="compat-hero-copy"><span class="compat-draft">원단 프로필 기반 · 검증 전</span><h3>조합 적합도 참고 점수</h3><span class="compat-status">${escape(result.label)}</span><p>DB의 소재 분류에 기획 가정을 적용한 추정치입니다. 실제 시료의 호환성이나 제작 성공을 보장하지 않습니다.</p><div class="compat-coverage"><span>근거 수준</span><strong>${escape(result.confidence)}</strong></div></div></section>
+  <section class="compat-metrics"><div class="compat-section-heading"><h3>항목별 참고 점수</h3><span>평가 가능한 항목만 반영</span></div>${result.dimensions.map(d=>{const v=score(d.score);return `<div class="compat-metric"><div class="compat-metric-label"><strong>${escape(d.label)}</strong><small>${escape(explanations[d.id] || '')}</small></div>${v===null?'<div class="compat-track compat-track-pending" aria-label="평가 보류"></div>':`<div class="compat-track" role="progressbar" aria-label="${escape(d.label)}" aria-valuenow="${v}" aria-valuemin="0" aria-valuemax="100"><span style="width:${v}%"></span></div>`}<span class="compat-metric-score">${metricValue(d.score)}</span></div>`;}).join('')}<p class="compat-not-scored">이염·내구성·봉제 적합성은 원단 프로필만으로 확인할 근거가 부족해 점수를 산정하지 않습니다. 신축 점수는 확인 가능한 조합만 평균합니다.</p></section>
+  <section class="compat-pairs"><div class="compat-section-heading"><h3>원단 쌍별 확인</h3><span>${result.pairs.length}개 조합</span></div>${result.pairs.map(pair=>`<article class="compat-pair"><div class="compat-pair-heading"><div>${pair.fabric_ids.map(id=>{const f=analysis.fabric_snapshots.find(s=>s.fabric_id===id);const card=selectionCards.find(c=>c.id===id);return `<span>${escape(card?.name || f?.name || id)}</span>`;}).join('<span class="pair-link">↔</span>')}</div><strong>${metricValue(pair.score)}</strong></div><p class="compat-pair-meta">${pair.score===null?'자료 부족으로 평가 보류':'소재 분류에 따른 기획용 추정 · 실제 시험 전'}</p><details><summary>점수 근거와 확인할 사항</summary><div class="compat-pair-evidence">${pair.dimensions.map(d=>`<div><strong>${escape(d.label)} <span>${metricValue(d.score)}</span></strong><p>${escape(d.reason)}</p></div>`).join('')}<ul>${pair.warnings.map(w=>`<li>${escape(w.message)}</li>`).join('')}</ul><details><summary>관련 연구 출처</summary><ul>${sourceList([...new Set(pair.source_ids)])}</ul></details></div></details></article>`).join('')}</section>
+  <section class="compat-next-checks"><div class="compat-section-heading"><h3>제작 전 확인할 사항</h3><span>${warnings.length}개</span></div>${warnings.map(w=>`<div class="compat-warning"><span aria-hidden="true">!</span><p>${escape(w.message)}</p></div>`).join('')}</section>
+  <section class="compat-tests"><div class="compat-section-heading"><h3>다음으로 확인할 테스트</h3></div><div class="compat-test-grid">${analysis.recommended_tests.map(t=>`<div><span aria-hidden="true">${t.test_type==='shrinkage'?'↔':'◐'}</span><strong>${escape(testNames[t.test_type] || t.test_type)}</strong><p>${escape(t.reason)}</p></div>`).join('')}</div></section>
+  <details class="compat-method"><summary>점수 계산 기준과 적용 범위</summary><div><p>${escape(result.disclaimer)}</p><ul><li>세탁 수축 반응 차이(40%): 소재 범주에 가정한 등급 나일론 1, 데님·면폴리 2, 울 3의 차이를 이용해 90 − 15 × 등급 차이로 계산합니다. 이 등급은 실측 수축률이 아닙니다.</li><li>신축 특성(30%): 두 DB 프로필이 비신축이면 85점으로 가정합니다. 하나라도 미확정이면 해당 항목을 제외합니다.</li><li>관리 조건(30%): 울 포함 60점, 울이 없고 나일론 포함 70점, 그 외 현재 소재는 80점으로 가정합니다.</li><li>평가를 보류한 항목의 비중은 다른 항목에 나누어 반영합니다. 전체 점수는 원단 쌍별 점수의 평균입니다.</li></ul><p>위 점수와 가중치는 해커톤 기획을 위한 임의 가정이며 연구나 표준이 제시한 수치가 아닙니다. 낮은 점수만으로 사용 불가를, 높은 점수만으로 안전을 판단할 수 없습니다. 이염·내구성·봉제 적합성은 점수에서 제외됩니다.</p><small>기획 기준 ${escape(result.version)}</small></div></details>
   <div class="review-actions compat-actions"><button class="review-back" data-back>← 선택 정보 확인</button><button class="btn btn-primary" data-guide>테스트 가이드 <span aria-hidden="true">→</span></button></div>`;
   $('#compat-content [data-back]').addEventListener('click',()=>switchStep('review'));
   $('#compat-content [data-guide]').addEventListener('click',()=>switchStep('guide'));
