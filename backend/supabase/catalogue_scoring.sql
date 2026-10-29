@@ -11,9 +11,9 @@ declare
  snapshots jsonb:='[]'; pairs jsonb:='[]'; warnings jsonb:='[]'; details jsonb; pair_warnings jsonb;
 begin
  if jsonb_typeof(fabric_ids) is distinct from 'array' or octet_length(fabric_ids::text)>4000 then
-  raise exception 'fabric_ids must be an array of 2-5 catalogue IDs' using errcode='22023';end if;
+  raise exception 'fabric_ids must be an array of 2-6 catalogue IDs' using errcode='22023';end if;
  n:=jsonb_array_length(fabric_ids);
- if n not between 2 and 5 then raise exception 'Select 2-5 fabrics' using errcode='22023';end if;
+ if n not between 2 and 6 then raise exception 'Select 2-6 fabrics' using errcode='22023';end if;
  for i in 0..n-1 loop
   if jsonb_typeof(fabric_ids->i) is distinct from 'string' then raise exception 'fabric ID must be a string' using errcode='22023';end if;
   id:=fabric_ids->>i;

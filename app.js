@@ -1,4 +1,4 @@
-import { API } from './api.js?v=0.8.1';
+import { API } from './api.js?v=0.8.2';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => document.querySelectorAll(selector);
@@ -62,7 +62,7 @@ $('#fabric-list').addEventListener('click',e => {
   const card = e.target.closest('[data-id]'); if (!card || busy) return;
   const id = card.dataset.id;
   if (selected.has(id)) selected.delete(id);
-  else if (selected.size < 5) selected.add(id);
+  else if (selected.size < 6) selected.add(id);
   else return;
   invalidate(); renderFabrics();
 });
@@ -81,10 +81,10 @@ function renderReview() {
   updateAnalyzeButton();
 }
 function updateAnalyzeButton(){
-  const needsSelection=selected.size<2 || selected.size>5;
+  const needsSelection=selected.size<2 || selected.size>6;
   $('#btn-test').disabled=busy || needsSelection;
   const helper=$('#review-next-hint');
-  if(helper)helper.textContent=needsSelection?'함께 확인할 원단을 2~5개 선택해주세요.':`${selected.size}개 원단의 조합 특성을 비교합니다.`;
+  if(helper)helper.textContent=needsSelection?'함께 확인할 원단을 2~6개 선택해주세요.':`${selected.size}개 원단의 조합 특성을 비교합니다.`;
 }
 $('#selected-fabrics').addEventListener('click',async e=>{
   if(e.target.closest('[data-select-more]')){switchStep('select');return;}
@@ -125,7 +125,7 @@ function renderResearchRecord(record){
 }
 $('#btn-test').addEventListener('click',analyze);
 async function analyze(){
-  if(busy || selected.size<2 || selected.size>5)return;
+  if(busy || selected.size<2 || selected.size>6)return;
   analysis=null;
   switchStep('review');
   currentStep='compat';
