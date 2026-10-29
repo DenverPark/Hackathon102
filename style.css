@@ -493,3 +493,16 @@ html { scroll-padding-bottom: 100px; }
 
 .home-link { font: inherit; color: inherit; background: none; border: 0; padding: 3px; cursor: pointer; }
 .home-link:focus-visible { outline: 3px solid #166fd1; outline-offset: 3px; border-radius: 6px; }
+
+#tab-guide .guide-intro p { line-height: 1.7; margin-top: 8px; }
+.guide-method ol { margin: 8px 0 0; padding-left: 20px; }
+.guide-method li { margin-bottom: 8px; }
+.wash-note { font-size: 12px; line-height: 1.7; color: #755e39; background: #fff9ec; padding: 12px; border-radius: 8px; }
+.wash-sources { margin-top: 15px; font-size: 12px; line-height: 1.7; color: #596b80; }
+.wash-sources summary { cursor: pointer; font-weight: 600; }
+.wash-form { display: grid; gap: 14px; }
+.wash-form label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: #455469; }
+.wash-form input,.wash-form select,.wash-form textarea { width: 100%; border: 1px solid #d2dae5; border-radius: 8px; padding: 10px; font: inherit; color: #253345; background: #fff; }
+.wash-form textarea { resize: vertical; }
+.wash-form button { justify-self: start; }
+#wash-status { color: #246c52; font-size: 12px; min-height: 1.4em; }

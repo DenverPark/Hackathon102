@@ -6,6 +6,7 @@ const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp
 let fabrics = [], sources = [], selected = new Set(), analysis = null, busy = false;
 const steps = ['select','review','compat','guide','action'];
 let currentStep = 'select';
+let washResult = {};
 const colors = {denim:'#2D4A7A',blend:'#B0C4B1'};
 // Presentation matches main. Only records returned by Supabase are selectable.
 const selectionCards = [
@@ -47,7 +48,7 @@ $('#home-link').addEventListener('click',()=>{ if (!busy) { switchStep('select')
 $$('.step').forEach(el => el.addEventListener('click',() => {
   if (steps.indexOf(el.dataset.step) <= steps.indexOf(currentStep)) switchStep(el.dataset.step);
 }));
-function invalidate() { analysis = null; }
+function invalidate() { analysis = null; washResult = {}; }
 function sourceList(ids) {
   return ids.map(id => {
     const s = sources.find(s => s.id === id);
@@ -159,7 +160,7 @@ function renderAnalysis(){
   const metricValue=value=>score(value)===null?'<span class="compat-pending">평가 보류</span>':`${escape(score(value))}<small>점</small>`;
   const fabricChip=f=>{const card=selectionCards.find(c=>c.id===f.fabric_id);return `<span class="result-fabric-chip"><i style="background:${card?.color || '#bbb'}"></i>${escape(card?.name || f.name)}</span>`;};
   const displayLabel=d=>d.id==='staining'?'이염 참고 점수':d.label;
-  const displayText=text=>String(text ?? '').replaceAll('기획 가정','임의 기준');
+  const displayText=text=>String(text ?? '').replaceAll('임의로 정한 기획 가정','임의 기준').replaceAll('기획 가정','임의 기준');
   const explanations={shrinkage:'소재 분류별 반응 가정',stretch:'DB에 등록된 신축 분류',care:'소재별 관리 조건의 확인 필요성',staining:''};
   const warnings=[...new Map(analysis.warnings.map(w=>[w.code,w])).values()];
   $('#compat-content').innerHTML=`<div class="compat-intro"><span class="review-eyebrow">조합 분석 결과</span><h2>제작 전, 함께 확인해보세요</h2><p>${analysis.fabric_snapshots.length}개 원단 · ${result.pairs.length}개 조합</p></div>
@@ -176,9 +177,29 @@ function renderAnalysis(){
 }
 function renderHandoff(step){
   const target=step==='guide'?$('#guide-content'):$('#action-content');
-  target.innerHTML=`<div class="guide-intro"><h2>${step==='guide'?'테스트 가이드 연결':'조치 추천 연결'}</h2><p>상세 가이드·결과 저장·조치 추천은 팀 담당자의 백엔드 연결 후 제공됩니다.</p></div>
-  ${analysis.recommended_tests.map(t=>`<article class="pair-card"><strong>${escape(testNames[t.test_type] || t.test_type)}</strong><p>${escape(t.reason)}</p></article>`).join('')}
-  <div class="action-bar"><button class="btn btn-ghost" data-back>← 분석 결과</button></div>`;
+  if(step==='action'){
+    target.innerHTML=`<div class="guide-intro"><h2>조치 추천 연결</h2><p>조치 추천은 팀 담당자의 백엔드 연결 후 제공됩니다.</p></div><div class="action-bar"><button class="btn btn-ghost" data-back>← 분석 결과</button></div>`;
+    target.querySelector('[data-back]').addEventListener('click',()=>switchStep('compat')); return;
+  }
+  const names=analysis.fabric_snapshots.map(f=>selectionCards.find(c=>c.id===f.fabric_id)?.name || f.name);
+  const references=['iso-6330-2021','iso-5077-2007','iso-105-c06-2010','iso-105-a03-2019'];
+  target.innerHTML=`<div class="guide-intro"><h2>🧪 테스트 진행 가이드</h2><p>선택한 ${escape(names.join(' · '))}의 조합 시편을 확인하세요.</p><p>아래는 가정에서 관찰하기 위한 참고 절차입니다. 공인 시험성적서나 합격 판정이 아닙니다.</p></div>
+  <article class="guide-card"><div class="guide-header"><span class="guide-icon">🌊</span><h3 class="guide-title">세탁 안정성 테스트</h3></div><p class="guide-desc">두 원단을 함께 사용했을 때 세탁 후 접합부와 외관의 변화를 관찰합니다. 여러 원단을 선택했다면 확인할 두 원단을 골라 시편별로 진행하세요.</p>
+  <div class="guide-method"><strong>준비물</strong><p>원단 시편 두 장, 봉제 도구, 줄자, 표기 도구, 기록지와 촬영 기기</p><strong>진행 순서</strong><ol><li>각 원단의 관리 라벨과 가공 상태를 확인합니다. 두 원단에 공통으로 허용되는 세탁 방법이 불명확하면 물세탁하지 말고 제조사 또는 시험기관에 확인합니다.</li><li>실제 제작에 사용할 방향과 봉제 방식으로 조합 시편을 만들고, 각 원단에 측정 위치와 방향을 표시합니다. 세탁 전 길이와 접합부 사진을 기록합니다.</li><li>두 원단에 적합한 공통 세탁·건조 방법으로 시편을 처리합니다. 온도, 세제, 세탁 방식, 횟수 및 건조 방법을 기록하고 같은 조건으로 전후를 비교합니다.</li><li>완전히 건조한 뒤 같은 위치를 측정하고, 접합부의 뒤틀림·주름·올풀림·파손과 색 변화 또는 이염을 세탁 전 사진과 비교합니다.</li><li>아래에 실제 관찰 결과와 조건을 입력합니다. 결과는 시험한 해당 시편과 조건에만 적용됩니다.</li></ol></div>
+  <p class="wash-note">세탁 중 색이 옮을 수 있으므로 본제품이나 다른 세탁물과 함께 시험하지 마세요. 수축·변형은 복구되지 않을 수 있습니다.</p>
+  <details class="wash-sources"><summary>DB의 관련 표준과 연구 출처</summary><p>ISO 자료는 시험 방법의 공개 소개입니다. 아래 가정용 절차 및 관찰 등급은 공인 표준 시험과 다릅니다.</p><ul class="review-source-list">${sourceList(references)}</ul></details></article>
+  <article class="guide-card"><div class="guide-header"><span class="guide-icon">📏</span><h3 class="guide-title">수축률 비교</h3></div><div class="guide-method"><ol><li>각 원단의 경사·위사 방향을 구분해 측정 구간을 표시하고 세탁 전 길이를 기록합니다.</li><li>공통으로 허용되는 같은 세탁·건조 조건을 사용하고 조건과 횟수를 기록합니다.</li><li>완전히 건조한 뒤 표시한 구간을 다시 측정합니다. 각 방향의 변화율은 (세탁 전 길이 − 세탁 후 길이) ÷ 세탁 전 길이 × 100입니다. 양수는 수축, 음수는 늘어남을 뜻합니다.</li><li>같은 조건과 방향의 결과만 비교합니다. 이 차이만으로 접합부 변형이나 합격 여부를 확정할 수 없습니다.</li></ol></div></article>
+  <article class="guide-card"><div class="guide-header"><span class="guide-icon">🎨</span><h3 class="guide-title">이염 확인</h3></div><div class="guide-method"><ol><li>실제로 사용할 색상과 염색 상태의 원단 시편을 준비하고 세탁 전 사진을 기록합니다.</li><li>두 원단의 관리 라벨을 확인하고 공통으로 허용되는 세탁 조건이 있을 때 별도 시편으로 관찰합니다.</li><li>건조 후 상대 원단에 색이 옮았는지 살펴보고, 원단 자체의 색 변화와 상대 원단 오염을 구분해 기록합니다.</li><li>눈으로 본 결과는 참고 관찰입니다. 공인 견뢰도 등급이 필요하면 적합한 첨부포와 표준 시험을 시험기관에 의뢰합니다.</li></ol></div></article>
+  <article class="guide-card"><div class="guide-header"><span class="guide-icon">📝</span><h3 class="guide-title">세탁 안정성 결과 입력</h3></div><p class="guide-desc">관찰 정도는 임시 기록용 5단계이며, 표준 등급이나 품질 합격 판정이 아닙니다. 입력 내용은 이 탭에서만 유지되고 저장되지 않습니다.</p>
+  <form id="wash-form" class="wash-form"><label>시험한 원단 조합<select name="pair" required><option value="">조합 선택</option>${analysis.compatibility.pairs.map(p=>{const label=p.fabric_ids.map(id=>selectionCards.find(c=>c.id===id)?.name||id).join(' + ');const key=p.fabric_ids.join('|');return `<option value="${escape(key)}" ${washResult.pair===key?'selected':''}>${escape(label)}</option>`;}).join('')}</select></label>
+  <label>접합부 변화 관찰<select name="grade" required><option value="">관찰 결과 선택</option>${[['5','5 — 변화 없음'],['4','4 — 약간의 변화'],['3','3 — 눈에 띄는 변화'],['2','2 — 큰 변형'],['1','1 — 접합부 분리 또는 파손']].map(([v,label])=>`<option value="${v}" ${washResult.grade===v?'selected':''}>${label}</option>`).join('')}</select></label>
+  <label>세탁 횟수<input name="cycles" type="number" min="1" max="100" step="1" placeholder="예: 1" value="${escape(washResult.cycles||'')}"></label><label>세탁 온도 (℃)<input name="temperature" type="number" min="0" max="100" step="0.1" placeholder="실제 사용한 온도" value="${escape(washResult.temperature||'')}"></label>
+  <label>세탁·건조 방식 및 관찰 내용<textarea name="notes" rows="3" maxlength="1000" placeholder="세제, 세탁 방식, 건조 방법과 변화 등을 기록하세요">${escape(washResult.notes||'')}</textarea></label><button type="submit" class="btn btn-primary">입력 결과 확인</button><p id="wash-status" role="status" aria-live="polite">${washResult.confirmed?'입력한 결과를 확인했습니다. 이 탭에서만 유지됩니다.':''}</p></form></article>
+  <div class="action-bar"><button class="btn btn-ghost" data-back>← 호환성 결과</button></div>`;
+  const form=target.querySelector('#wash-form');
+  form.addEventListener('input',()=>{washResult={...washResult,...Object.fromEntries(new FormData(form)),confirmed:false};target.querySelector('#wash-status').textContent='';});
+  form.addEventListener('change',()=>{washResult={...washResult,...Object.fromEntries(new FormData(form)),confirmed:false};target.querySelector('#wash-status').textContent='';});
+  form.addEventListener('submit',e=>{e.preventDefault();if(!form.reportValidity())return;washResult={...Object.fromEntries(new FormData(form)),confirmed:true};target.querySelector('#wash-status').textContent='입력한 결과를 확인했습니다. 이 탭에서만 유지됩니다.';});
   target.querySelector('[data-back]').addEventListener('click',()=>switchStep('compat'));
 }
 // Team integration: full server response and recommended_tests[].test_type, no mock save.
