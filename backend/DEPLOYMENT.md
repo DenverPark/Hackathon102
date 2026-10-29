@@ -2,7 +2,7 @@
 
 ## 2026-10-28 — 나일론·울 추가, v0.4.0
 
-- GitHub 작업 브랜치: feature/supabase-integration.
+- GitHub 작업 브랜치: backend1.
 - 대상 Supabase 프로젝트: czxcnvgbrrakyydtdhgh.
 - Supabase 플러그인은 해당 프로젝트의 SQL·advisors 접근을 거절했습니다. 로그인된 Dashboard SQL Editor로 기존 스키마를 먼저 조회한 뒤 배포했습니다. 플러그인 권한이 해결됐다고 간주하지 않습니다.
 - CLI를 설치하거나 CLI migration history를 생성하지 않았습니다. updates/의 SQL은 Dashboard 적용본이며 migration으로 적용했다고 표시하지 않습니다.
