@@ -1,4 +1,4 @@
-import { API } from './api.js?v=0.7.1';
+import { API } from './api.js?v=0.8.0';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => document.querySelectorAll(selector);
@@ -13,8 +13,8 @@ const selectionCards = [
   {id:'wool100',name:'울',color:'#8E7C6A',desc:'보온성이 우수한 천연 동물성 섬유',tags:['천연','보온','중량']},
   {id:'denim-cotton100',name:'데님',color:'#2D4A7A',desc:'능직으로 짜인 내구성 높은 면직물',tags:['천연','능직','중량']},
   {id:'cotton65-poly35',name:'코튼 폴리에스터 블렌드',color:'#B0C4B1',desc:'면과 폴리에스터를 혼방한 실용적 원단',tags:['혼방','실용','중량']},
-  {name:'면직물',color:'#E8D5B7',desc:'통기성과 흡습성이 좋은 천연 면 원단',tags:['천연','통기성','중량']},
-  {name:'폴리에스터',color:'#C8D8E4',desc:'구김이 적고 관리가 쉬운 합성 섬유',tags:['합성','경량','속건']},
+  {id:'cotton100',name:'면직물',color:'#E8D5B7',desc:'통기성과 흡습성이 좋은 천연 면 원단',tags:['천연','통기성','중량']},
+  {id:'polyester100',name:'폴리에스터',color:'#C8D8E4',desc:'구김이 적고 관리가 쉬운 합성 섬유',tags:['합성','경량','속건']},
 ];
 const testNames = {shrinkage:'수축률 비교',staining:'이염 확인'};
 const fieldNames = {color_depth:'색상 농도',prewashed:'사전 세탁 여부',staining_grade:'첨부포 이염 등급',comparable_shrinkage:'동일 조건 수축률',measurement:'실측 정보',nylon_type:'나일론 종류',coating:'코팅·가공',heat_set:'열고정 여부',construction:'직물·편물 구분',shrinkproofed:'방축 가공 여부',shrinkage_kind:'수축 종류'};
@@ -71,8 +71,8 @@ function renderReview() {
   $('#selected-summary').innerHTML=`<div class="review-heading"><div><span class="review-eyebrow">조합 준비</span><h2>선택한 원단을 확인하세요</h2><p>선택한 원단의 특성을 바탕으로 조합을 살펴볼게요.</p></div><span class="review-count">${list.length}<small>개 선택</small></span></div>`;
   $('#selected-fabrics').innerHTML=list.map((f,index)=>{
     const card=selectionCards.find(c=>c.id===f.id);
-    const composition=Object.entries(f.composition).map(([key,value])=>`${({cotton:'면',polyester:'폴리에스터',nylon:'나일론',wool:'울'})[key] || key} ${value}%`).join(' · ');
-    const stretch=f.stretch==='non_stretch'?'비신축':f.stretch==='construction_dependent'?'조직에 따라 다름':f.stretch;
+    const composition=Object.entries(f.composition).map(([key,value])=>`${({cotton:'면',polyester:'폴리에스터',nylon:'나일론',wool:'울'})[key] || key} ${value}%`).join(' · ') || '혼용률 미확인';
+    const stretch=f.stretch==='non_stretch'?'비신축':f.stretch==='construction_dependent'?'조직에 따라 다름':f.stretch==='unknown'?'미확인':f.stretch;
     return `<article class="sample-card" data-id="${escape(f.id)}" aria-label="${escape(card?.name || f.name)} 원단 정보"><header class="review-card-header"><span class="review-swatch" style="background:${card?.color || '#bbb'}" aria-hidden="true"></span><div class="review-card-title"><span class="review-sample-number">원단 ${index+1}</span><h3>${escape(card?.name || f.name)}</h3><p>${escape(composition)}</p></div><button class="review-remove" data-remove="${escape(f.id)}" aria-label="${escape(f.name)} 선택 해제">선택 해제</button></header>
     <div class="review-material-tags"><span>${escape(f.structure || '조직 미확인')}</span><span>${escape(stretch || '신축성 미확인')}</span></div>
     <p class="review-fabric-summary">${escape(f.summary)}</p>
@@ -156,7 +156,7 @@ function renderAnalysis(){
   <section class="compat-pairs"><div class="compat-section-heading"><h3>원단 쌍별 확인</h3><span>${result.pairs.length}개 조합</span></div>${result.pairs.map(pair=>`<article class="compat-pair"><div class="compat-pair-heading"><div>${pair.fabric_ids.map(id=>{const f=analysis.fabric_snapshots.find(s=>s.fabric_id===id);const card=selectionCards.find(c=>c.id===id);return `<span>${escape(card?.name || f?.name || id)}</span>`;}).join('<span class="pair-link">↔</span>')}</div><strong>${metricValue(pair.score)}</strong></div><p class="compat-pair-meta">${pair.score===null?'자료 부족으로 평가 보류':'소재 분류에 따른 기획용 추정 · 실제 시험 전'}</p><details><summary>점수 근거와 확인할 사항</summary><div class="compat-pair-evidence">${pair.dimensions.map(d=>`<div><strong>${escape(d.label)} <span>${metricValue(d.score)}</span></strong><p>${escape(d.reason)}</p></div>`).join('')}<ul>${pair.warnings.map(w=>`<li>${escape(w.message)}</li>`).join('')}</ul><details><summary>관련 연구 출처</summary><ul>${sourceList([...new Set(pair.source_ids)])}</ul></details></div></details></article>`).join('')}</section>
   <section class="compat-next-checks"><div class="compat-section-heading"><h3>제작 전 확인할 사항</h3><span>${warnings.length}개</span></div>${warnings.map(w=>`<div class="compat-warning"><span aria-hidden="true">!</span><p>${escape(w.message)}</p></div>`).join('')}</section>
   <section class="compat-tests"><div class="compat-section-heading"><h3>다음으로 확인할 테스트</h3></div><div class="compat-test-grid">${analysis.recommended_tests.map(t=>`<div><span aria-hidden="true">${t.test_type==='shrinkage'?'↔':'◐'}</span><strong>${escape(testNames[t.test_type] || t.test_type)}</strong><p>${escape(t.reason)}</p></div>`).join('')}</div></section>
-  <details class="compat-method"><summary>점수 계산 기준과 적용 범위</summary><div><p>${escape(result.disclaimer)}</p><ul><li>세탁 수축 반응 차이(40%): 소재 범주에 가정한 등급 나일론 1, 데님·면폴리 2, 울 3의 차이를 이용해 90 − 15 × 등급 차이로 계산합니다. 이 등급은 실측 수축률이 아닙니다.</li><li>신축 특성(30%): 두 DB 프로필이 비신축이면 85점으로 가정합니다. 하나라도 미확정이면 해당 항목을 제외합니다.</li><li>관리 조건(30%): 울 포함 60점, 울이 없고 나일론 포함 70점, 그 외 현재 소재는 80점으로 가정합니다.</li><li>평가를 보류한 항목의 비중은 다른 항목에 나누어 반영합니다. 전체 점수는 원단 쌍별 점수의 평균입니다.</li></ul><p>위 점수와 가중치는 해커톤 기획을 위한 임의 가정이며 연구나 표준이 제시한 수치가 아닙니다. 낮은 점수만으로 사용 불가를, 높은 점수만으로 안전을 판단할 수 없습니다. 이염·내구성·봉제 적합성은 점수에서 제외됩니다.</p><small>기획 기준 ${escape(result.version)}</small></div></details>
+  <details class="compat-method"><summary>점수 계산 기준과 적용 범위</summary><div><p>${escape(result.disclaimer)}</p><ul><li>세탁 수축 반응 차이(40%): 소재 범주에 가정한 등급 나일론·폴리에스터 1, 면직물·데님·면폴리 2, 울 3의 차이를 이용해 90 − 15 × 등급 차이로 계산합니다. 이 등급은 실측 수축률이 아닙니다.</li><li>신축 특성(30%): 두 DB 프로필이 비신축이면 85점으로 가정합니다. 하나라도 미확정이면 해당 항목을 제외합니다.</li><li>관리 조건(30%): 울 포함 60점, 울이 없고 나일론 또는 폴리에스터 포함 70점, 그 외 현재 소재는 80점으로 가정합니다.</li><li>평가를 보류한 항목의 비중은 다른 항목에 나누어 반영합니다. 전체 점수는 원단 쌍별 점수의 평균입니다.</li></ul><p>위 점수와 가중치는 해커톤 기획을 위한 임의 가정이며 연구나 표준이 제시한 수치가 아닙니다. 낮은 점수만으로 사용 불가를, 높은 점수만으로 안전을 판단할 수 없습니다. 이염·내구성·봉제 적합성은 점수에서 제외됩니다.</p><small>기획 기준 ${escape(result.version)}</small></div></details>
   <div class="review-actions compat-actions"><button class="review-back" data-back>← 선택 정보 확인</button><button class="btn btn-primary" data-guide>테스트 가이드 <span aria-hidden="true">→</span></button></div>`;
   $('#compat-content [data-back]').addEventListener('click',()=>switchStep('review'));
   $('#compat-content [data-guide]').addEventListener('click',()=>switchStep('guide'));

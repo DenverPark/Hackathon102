@@ -1,6 +1,6 @@
 {
   "name": "hackathon102",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "test:scoring": "node tests/scoring-smoke.mjs",
     "test:catalogue": "node tests/catalogue-smoke.mjs",
     "start": "python -m http.server 8102 --bind 127.0.0.1",
-    "test:evidence": "node tests/evidence-smoke.mjs"
+    "test:evidence": "node tests/evidence-smoke.mjs",
+    "test:six-fabrics": "node tests/six-fabrics-smoke.mjs"
   }
 }

@@ -29,11 +29,11 @@ begin
    select * into fa from public.lm_fabrics f where f.id=a;
    select * into fb from public.lm_fabrics f where f.id=b;
    -- Ordered categories are provisional product assumptions, not measured shrinkage percentages.
-   class_a:=case fa.category when 'nylon' then 1 when 'denim' then 2 when 'blend' then 2 when 'wool' then 3 else null end;
-   class_b:=case fb.category when 'nylon' then 1 when 'denim' then 2 when 'blend' then 2 when 'wool' then 3 else null end;
+   class_a:=case fa.category when 'nylon' then 1 when 'polyester' then 1 when 'cotton' then 2 when 'denim' then 2 when 'blend' then 2 when 'wool' then 3 else null end;
+   class_b:=case fb.category when 'nylon' then 1 when 'polyester' then 1 when 'cotton' then 2 when 'denim' then 2 when 'blend' then 2 when 'wool' then 3 else null end;
    shrink_score:=case when class_a is null or class_b is null then null else 90-15*abs(class_a-class_b) end;
    stretch_score:=case when fa.stretch='non_stretch' and fb.stretch='non_stretch' then 85 else null end;
-   care_score:=case when class_a is null or class_b is null then null when 'wool' in (fa.category,fb.category) then 60 when 'nylon' in (fa.category,fb.category) then 70 else 80 end;
+   care_score:=case when class_a is null or class_b is null then null when 'wool' in (fa.category,fb.category) then 60 when 'nylon' in (fa.category,fb.category) or 'polyester' in (fa.category,fb.category) then 70 else 80 end;
    pair_warnings:='[]';
    if 'wool' in (fa.category,fb.category) then
     pair_warnings:=pair_warnings||jsonb_build_array(jsonb_build_object('code','WOOL_PROCESSING','message','울은 직물·편물 및 방축 가공 여부에 따라 관리와 수축 특성이 달라질 수 있습니다.','source_ids',jsonb_build_array('bpc-report','bpc-kci-wool')));end if;
@@ -43,6 +43,8 @@ begin
     pair_warnings:=pair_warnings||jsonb_build_array(jsonb_build_object('code','DENIM_SAMPLE','message','데님 연구자료는 특정 시료의 결과이므로 실제 원단과 동일하다고 볼 수 없습니다.','source_ids',jsonb_build_array('denim-wash')));end if;
    if 'blend' in (fa.category,fb.category) then
     pair_warnings:=pair_warnings||jsonb_build_array(jsonb_build_object('code','BLEND_SOURCE','message','혼방 원단의 참고 연구는 일부 조성이 다르므로 해당 수치를 그대로 적용할 수 없습니다.','source_ids',jsonb_build_array('blend-profile','blend-shirt')));end if;
+   if 'cotton' in (fa.category,fb.category) or 'polyester' in (fa.category,fb.category) then
+    pair_warnings:=pair_warnings||jsonb_build_array(jsonb_build_object('code','NEW_FABRIC_PROFILE','message','면직물과 폴리에스터의 시험 결과는 조직·염색·가공 및 세탁 조건에 따라 달라집니다. 제공된 조사값은 실제 선택 원단의 측정값이 아닙니다.','source_ids',jsonb_build_array('cotton-survey-202610','polyester-survey-202610'))); end if;
    pair_warnings:=pair_warnings||jsonb_build_array(jsonb_build_object('code','STAINING_UNKNOWN','message','색상과 실제 염색 이력은 확인되지 않아 이염 가능성을 점수로 산정하지 않았습니다.','source_ids','[]'::jsonb));
    if shrink_score is null or care_score is null then pair_score:=null;unavailable:=true;
    else pair_score:=round((shrink_score*40+care_score*30+coalesce(stretch_score,0)*30)/(70+case when stretch_score is null then 0 else 30 end),1);
@@ -58,9 +60,9 @@ begin
    warnings:=warnings||pair_warnings;pair_count:=pair_count+1;
   end loop;
  end loop;
- return jsonb_build_object('schema_version','1.0','rule_version','0.6.0-catalogue-draft','fabric_snapshots',snapshots,'warnings',warnings,
+ return jsonb_build_object('schema_version','1.0','rule_version','0.8.0-catalogue-draft','fabric_snapshots',snapshots,'warnings',warnings,
   'recommended_tests',jsonb_build_array(jsonb_build_object('test_type','shrinkage','reason','서로 다른 원단의 실제 치수 변화 확인','priority','recommended'),jsonb_build_object('test_type','staining','reason','실제 시료의 염색·이염 확인','priority','recommended')),
-  'compatibility',jsonb_build_object('version','0.6.0-catalogue-draft','score',case when unavailable then null else round(score_sum/pair_count,1) end,'min_pair_score',case when unavailable then null else min_score end,
+  'compatibility',jsonb_build_object('version','0.8.0-catalogue-draft','score',case when unavailable then null else round(score_sum/pair_count,1) end,'min_pair_score',case when unavailable then null else min_score end,
    'label',case when unavailable then '자료 부족' else '기획용 추정' end,'confidence','낮음',
    'dimensions',jsonb_build_array(jsonb_build_object('id','shrinkage','label','세탁 수축 반응 차이','score',case when unavailable then null else round(shrink_sum/pair_count,1) end),jsonb_build_object('id','stretch','label','신축 특성','score',case when stretch_count=0 then null else round(stretch_sum/stretch_count,1) end),jsonb_build_object('id','care','label','관리 조건 확인','score',case when unavailable then null else round(care_sum/pair_count,1) end),jsonb_build_object('id','staining','label','이염 가능성','score',null)),
    'pairs',pairs,'not_evaluated',jsonb_build_array('이염','내구성','봉제 적합성'),
