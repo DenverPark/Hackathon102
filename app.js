@@ -262,16 +262,41 @@ async function analyze() {
 // ============================================================
 function renderCompat() {
   if (!analysis) return;
-  const { fabrics: chosenFabrics, pairs, avgScore } = analysis;
-  const chip = f => { const card=selectionCards.find(c=>c.id===f.id);return `<span class="result-fabric-chip"><i style="background:${card?.color || f.color || '#bbb'}"></i>${escape(f.name)}</span>`; };
-  const origin = p => p.score_origin==='database'?'DB에 사전 등록된 점수':p.score_origin==='default'?'자료 없어 지정한 기본값':'화면에 포함된 임시 점수';
+  const snapshot=analysis;
+  const { fabrics: chosenFabrics, pairs, avgScore } = snapshot;
+  const numeric=typeof avgScore==='number' && Number.isFinite(avgScore)?avgScore:null;
+  const clamp=value=>Math.max(0,Math.min(100,value));
+  const metrics=[
+    {label:'종합 적합도',score:numeric,note:'원단 쌍별 등록 점수의 평균'},
+    {label:'세탁·수축 호환성',score:numeric===null?null:clamp(numeric-2),note:'임의 표시값 · 종합점수 − 2'},
+    {label:'내구성 및 봉제 적합',score:numeric===null?null:clamp(numeric+3),note:'임의 표시값 · 종합점수 + 3'},
+    {label:'이염 및 관리 호환',score:numeric===null?null:clamp(numeric-4),note:'임의 표시값 · 종합점수 − 4'}
+  ];
+  const chip=f=>{const card=selectionCards.find(c=>c.id===f.id);return `<span class="result-fabric-chip"><i style="background:${card?.color||f.color||'#bbb'}"></i>${escape(f.name)}</span>`;};
+  const origin=p=>p.score_origin==='database'?'DB에 사전 등록된 점수':p.score_origin==='default'?'자료 없어 지정한 기본값':'화면에 포함된 임시 점수';
   $('#compat-content').innerHTML=`<div class="compat-intro"><span class="review-eyebrow">제작 전 확인</span><h2>원단 조합을 살펴보세요</h2><p>${chosenFabrics.length}개 원단 · ${pairs.length}개 조합</p></div>
   <div class="result-fabric-chips">${chosenFabrics.map(chip).join('<span class="result-plus">+</span>')}</div>
-  <section class="compat-hero"><div class="compat-score-ring" style="--score:${Number(avgScore)}"><div><strong>${escape(avgScore)}</strong><span>/ 100점</span></div></div><div class="compat-hero-copy"><span class="compat-draft">기획용 임시 지표 · 검증 전</span><h3>조합별 등록 점수 평균</h3><p>두 원단씩 미리 정해진 점수의 평균입니다. 실제 선택 원단을 측정한 점수, 공인 시험 결과 또는 제작 성공 가능성이 아닙니다.</p><p>자료가 없으면 기본 점수 50이 포함될 수 있어요. 점수만으로 사용 가능 여부를 판단하지 마세요.</p></div></section>
+  <section class="compat-hero"><div class="compat-score-ring" style="--score:${numeric===null?0:clamp(numeric)}"><div><strong>${numeric===null?'—':escape(numeric)}</strong><span>${numeric===null?'점수 보류':'/ 100점'}</span></div></div><div class="compat-hero-copy"><span class="compat-draft">기획용 임시 지표 · 검증 전</span><h3>조합별 등록 점수 평균</h3><p>두 원단씩 미리 정해진 점수의 평균입니다. 실제 선택 원단을 측정한 점수, 공인 시험 결과 또는 제작 성공 가능성이 아닙니다.</p><p>자료가 없으면 기본 점수 50이 포함될 수 있어요. 점수만으로 사용 가능 여부를 판단하지 마세요.</p></div></section>
+  <section class="compat-metrics"><div class="compat-section-heading"><h3>항목별 참고 점수</h3><span>기획용 · 검증 전</span></div>${metrics.map(m=>`<div class="compat-metric"><div class="compat-metric-label"><strong>${escape(m.label)}</strong><small>${escape(m.note)}</small></div>${m.score===null?'<div class="compat-track compat-track-pending" aria-label="평가 보류"></div>':`<div class="compat-track" role="progressbar" aria-label="${escape(m.label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${m.score}"><span style="width:${m.score}%"></span></div>`}<span class="compat-metric-score">${m.score===null?'<span class="compat-pending">평가 보류</span>':`${escape(m.score)}<small>점</small>`}</span></div>`).join('')}<p class="compat-not-scored">세부 점수는 종합점수에서 숫자를 더하거나 뺀 임의 표시값입니다. 수축률·봉제강도·이염을 실제로 측정해 계산한 결과가 아닙니다.</p></section>
   <section class="compat-pairs"><div class="compat-section-heading"><h3>원단 조합별 참고 정보</h3><span>${pairs.length}개 조합</span></div>${pairs.map(p=>`<article class="compat-pair"><div class="compat-pair-heading"><div><span>${escape(p.nameA)}</span><span class="pair-link">↔</span><span>${escape(p.nameB)}</span></div><strong>${escape(p.score)}<small>점</small></strong></div><p class="compat-pair-meta">${escape(origin(p))} · 검증되지 않은 기획값</p><p class="compat-pair-meta">소재와 가공 상태에 따른 실제 변화는 4단계의 DB 근거와 시편 확인이 필요합니다.</p></article>`).join('')}</section>
-  <section class="compat-tests"><div class="compat-section-heading"><h3>다음 단계에서 확인해요</h3></div><p>원단별 연구 DB 기록을 바탕으로 수축·이염·색 변화와 관련된 확인 항목을 찾아볼 수 있습니다. 원단의 관리 표시와 실제 시험을 우선하세요.</p></section>
-  <details class="compat-method"><summary>점수의 계산 방식과 한계</summary><div><p>선택한 원단을 두 개씩 짝지어 사전에 등록된 점수를 조회하고, 모든 조합 점수의 평균을 반올림합니다. 각 조합 점수의 검증된 환산 기준은 확인되지 않았습니다.</p><p>3페이지 점수는 4페이지 연구 DB의 실제 수축률이나 이염 실험값을 계산한 것이 아니며 ISO·KS 공인 점수가 아닙니다. 가공·색상·관리 조건에 따라 실제 원단의 특성은 달라질 수 있습니다.</p></div></details>
+  <section class="compat-tests"><div class="compat-section-heading"><h3>다음 단계에서 확인해요</h3><span>DB 연구 기록 기준</span></div><div class="compat-test-grid" data-compat-tests><div role="status"><p>추천 항목을 불러오고 있어요...</p></div></div></section>
+  <details class="compat-method"><summary>점수의 계산 방식과 한계</summary><div><p>선택한 원단을 두 개씩 짝지어 사전에 등록된 점수를 조회하고, 모든 조합 점수의 평균을 반올림합니다. 각 조합 점수의 검증된 환산 기준은 확인되지 않았습니다.</p><p>세탁·수축 항목은 종합 − 2, 봉제·내구 항목은 종합 + 3, 이염·관리 항목은 종합 − 4로 임의 표시하며 각 값은 0~100점으로 제한합니다. 항목별 시험 결과는 반영되지 않습니다.</p><p>3페이지 점수는 4페이지 연구 DB의 실제 수축률이나 이염 실험값을 계산한 것이 아니며 ISO·KS 공인 점수가 아닙니다. 가공·색상·관리 조건에 따라 실제 원단의 특성은 달라질 수 있습니다.</p></div></details>
   <div class="review-actions compat-actions"><button class="review-back" onclick="switchStep('review')">← 선택 정보 확인</button><button class="btn btn-primary" onclick="switchStep('guide')">4단계 테스트 가이드 <span aria-hidden="true">→</span></button></div>`;
+  loadCompatTests(snapshot);
+}
+async function loadCompatTests(snapshot){
+  const container=$('#compat-content [data-compat-tests]');if(!container)return;
+  try{
+    const {byId}=await GuideEvidence.getSelected(snapshot.fabrics.map(f=>f.id));
+    if(analysis!==snapshot||currentStep!=='compat')return;
+    const found=new Set(snapshot.pairs.flatMap(pair=>GuideEvidence.recommendations([pair.fabric_a_id,pair.fabric_b_id],byId).map(item=>item.property)));
+    const cards=[['shrinkage','📏','수축률 비교','세탁 전후 각 원단의 길이 변화를 비교합니다.'],['staining','🎨','물 빠짐 확인','원단의 색이 흰 천에 묻어나는지 살펴봅니다.'],['color_change','🌈','색상 변화 확인','원단 자체의 세탁 전후 변화를 관찰합니다.']].filter(card=>found.has(card[0]));
+    container.innerHTML=cards.length?cards.map(([,icon,title,description])=>`<div><span aria-hidden="true">${icon}</span><strong>${escape(title)}</strong><p>${escape(description)}</p></div>`).join(''):'<div><p>선택한 원단에서 관련 연구 기록을 찾지 못했습니다.</p></div>';
+  }catch(error){
+    if(analysis!==snapshot||currentStep!=='compat')return;
+    container.innerHTML=`<div role="alert"><p>DB 연구 기록을 불러오지 못했습니다. ${escape(error.message)}</p><button type="button" class="btn btn-ghost" data-compat-retry>다시 시도</button></div>`;
+    container.querySelector('[data-compat-retry]').addEventListener('click',()=>loadCompatTests(snapshot));
+  }
 }
 
 // ============================================================
