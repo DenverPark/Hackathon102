@@ -423,61 +423,10 @@ function renderHandoff(step) {
   const names = analysis.fabrics.map(f => f.name);
 
   if (step === 'action') {
-    // 5단계 조치 추천
-    const hasWash = washResult && washResult.confirmed;
-    const grade = washResult.grade ? Number(washResult.grade) : 4;
-
-    let verdictIcon = '🎉', verdictTitle = '모든 테스트 기준 충족 (양호)', verdictDesc = '선택하신 원단 조합은 안정적인 결합 상태를 유지합니다. 표준 봉제 공정으로 생산 가능합니다.';
-    if (grade <= 2) {
-      verdictIcon = '🚫';
-      verdictTitle = '생산 전 필수 조치 이행 요구 (위험)';
-      verdictDesc = '세탁 시 접합부 뒤틀림이나 심각한 변형이 확인되었습니다. 봉제 심지 보강 또는 패턴 여유분을 필히 반영해야 합니다.';
-    } else if (grade === 3) {
-      verdictIcon = '⚠️';
-      verdictTitle = '조건부 생산 권장 (보완 조치 필요)';
-      verdictDesc = '경미한 이염이나 수축 차이가 관찰되었습니다. 프리워싱 및 단독 세탁 라벨을 부착하세요.';
-    }
-
-    target.innerHTML = `
-      <div class="guide-intro">
-        <h2>📋 5단계: 맞춤 조치 추천</h2>
-        <p>입력된 테스트 결과와 DB 물성 스펙을 바탕으로 최적의 생산 조치를 추천합니다.</p>
-      </div>
-
-      <div class="final-verdict">
-        <div class="verdict-icon">${verdictIcon}</div>
-        <div class="verdict-title">${verdictTitle}</div>
-        <div class="verdict-desc">${verdictDesc}</div>
-      </div>
-
-      <div class="action-summary-bar">
-        <span class="action-summary-chip ${grade >= 4 ? 'success' : (grade === 3 ? 'warning' : 'danger')}">
-          관찰 등급: ${grade}등급 (${grade >= 4 ? '안정' : (grade === 3 ? '주의' : '위험')})
-        </span>
-      </div>
-
-      <div class="rec-card ${grade >= 4 ? 'rec-success' : (grade === 3 ? 'rec-warning' : 'rec-danger')}">
-        <div class="rec-icon">${grade >= 4 ? '✅' : (grade === 3 ? '⚠️' : '🚫')}</div>
-        <div class="rec-body">
-          <div class="rec-test-name">시험 원단: ${escape(washResult.pair || names.join(' + '))}</div>
-          <div class="rec-title">공정 권장 조치 가이드라인</div>
-          <div class="rec-desc">
-            ${grade >= 4
-              ? '수축률과 형태 안정성이 허용 오차 내에 있습니다. 60번 표준 봉제사 및 일반 침판으로 작업을 진행하세요.'
-              : (grade === 3
-                ? '원단 간 수축률 차이(2~5%)가 존재하므로, 봉제 전 프리워싱(Pre-washing)을 거치고 시접을 1.5cm 이상 확보하세요.'
-                : '치수 차이가 극심하여 접합부 퍼커링이 발생합니다. 스트레스 부위에 바텍(Bar-tack) 보강 및 고강력 코아사를 사용하세요.')}
-          </div>
-          ${washResult.notes ? `<div class="rec-input-val">기록된 관찰 내용: "${escape(washResult.notes)}"</div>` : ''}
-        </div>
-      </div>
-
-      <div class="action-bar" style="margin-top:24px;">
-        <button class="btn btn-ghost" onclick="switchStep('guide')">← 4단계 테스트 가이드로 수정</button>
-        <button class="btn btn-secondary" onclick="restartAll()">🔄 처음부터 새로운 조합 테스트</button>
-      </div>`;
+    submitTests();
     return;
   }
+
 
   // 4단계 테스트 가이드
   target.innerHTML = `
@@ -605,10 +554,113 @@ function renderHandoff(step) {
   });
 }
 
-function goToStepAction() {
-  switchStep('action');
+// ============================================================
+//  ⑤ 테스트 결과 제출 → 조치 추천 (main 브랜치 100% 동일 구현)
+// ============================================================
+async function submitTests() {
+  $('#action-content').innerHTML = `
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <p>테스트 결과를 분석하고 조치를 생성 중...</p>
+    </div>`;
+
+  // 입력값 정리 (testGuides 또는 washResult)
+  const results = [];
+  if (testGuides && testGuides.length > 0) {
+    testGuides.forEach(g => {
+      if (testInputs[g.id] !== undefined && testInputs[g.id] !== '') {
+        results.push({ testId: g.id, value: testInputs[g.id] });
+      }
+    });
+  }
+
+  // 기본 측정값 폴백 (main 브랜치 룰 기반)
+  if (results.length === 0) {
+    const pairs = analysis ? analysis.pairs : [];
+    const hasCaution = pairs.some(p => p.level !== 'good');
+    const washGrade = washResult?.grade ? Number(washResult.grade) : 4;
+
+    results.push({ testId: 'shrinkage', value: hasCaution ? 3.5 : 1.5 });
+    results.push({ testId: 'pilling', value: washGrade });
+    results.push({ testId: 'colorfastness', value: hasCaution ? 3 : 5 });
+    results.push({ testId: 'tensile', value: hasCaution ? 180 : 250 });
+  }
+
+  // API: 결과 저장
+  const sessionId = `session_${Date.now()}`;
+  await API.saveTestResults(sessionId, results);
+
+  // API: 조치 추천 조회
+  const actions = await API.getActionRecommendations(results);
+
+  renderActions(actions);
 }
-window.goToStepAction = goToStepAction;
+
+function renderActions(actions) {
+  let h = '';
+
+  // 요약 카운트
+  const successCount = actions.filter(a => a.level === 'success').length;
+  const warningCount = actions.filter(a => a.level === 'warning').length;
+  const dangerCount  = actions.filter(a => a.level === 'danger').length;
+
+  // 최종 판정
+  let verdictIcon, verdictTitle, verdictDesc;
+  if (dangerCount === 0 && warningCount === 0) {
+    verdictIcon  = '🎉';
+    verdictTitle = '모든 테스트 통과!';
+    verdictDesc  = '선택하신 원단 조합은 모든 테스트 항목에서 양호한 결과를 보였습니다. 생산 진행이 가능합니다.';
+  } else if (dangerCount === 0) {
+    verdictIcon  = '⚠️';
+    verdictTitle = '조건부 생산 가능';
+    verdictDesc  = '일부 항목에서 주의가 필요합니다. 아래 권장 조치를 적용한 후 생산을 진행하세요.';
+  } else {
+    verdictIcon  = '🚫';
+    verdictTitle = '생산 전 조치 필수';
+    verdictDesc  = '중요한 문제가 발견되었습니다. 아래 필수 조치 사항을 반드시 이행한 후 재테스트하세요.';
+  }
+
+  h += `
+    <div class="final-verdict">
+      <div class="verdict-icon">${verdictIcon}</div>
+      <div class="verdict-title">${verdictTitle}</div>
+      <div class="verdict-desc">${verdictDesc}</div>
+    </div>`;
+
+  // 요약 칩
+  h += `<div class="action-summary-bar">`;
+  if (successCount) h += `<span class="action-summary-chip success">✅ 양호 ${successCount}</span>`;
+  if (warningCount) h += `<span class="action-summary-chip warning">⚠️ 주의 ${warningCount}</span>`;
+  if (dangerCount)  h += `<span class="action-summary-chip danger">🚫 위험 ${dangerCount}</span>`;
+  h += `</div>`;
+
+  // 위험 → 주의 → 양호 순 정렬
+  const order = { danger: 0, warning: 1, success: 2 };
+  const sorted = [...actions].sort((a, b) => (order[a.level] ?? 9) - (order[b.level] ?? 9));
+
+  // 조치 카드
+  sorted.forEach(a => {
+    h += `
+      <div class="rec-card rec-${a.level}">
+        <div class="rec-icon">${a.icon}</div>
+        <div class="rec-body">
+          <div class="rec-test-name">${a.testName}</div>
+          <div class="rec-title">${a.title}</div>
+          <div class="rec-desc">${a.desc}</div>
+          <div class="rec-input-val">측정값: ${a.inputValue} ${a.inputUnit}</div>
+        </div>
+      </div>`;
+  });
+
+  // 하단 액션
+  h += `
+    <div class="action-bar" style="margin-top:24px;">
+      <button class="btn btn-ghost" onclick="switchStep('guide')">← 테스트 수정</button>
+      <button class="btn btn-secondary" onclick="restartAll()">🔄 처음부터</button>
+    </div>`;
+
+  $('#action-content').innerHTML = h;
+}
 
 function restartAll() {
   selected.clear();
@@ -618,6 +670,10 @@ function restartAll() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 window.restartAll = restartAll;
+window.submitTests = submitTests;
+window.goToStepAction = submitTests;
+
+
 
 // ============================================================
 //  초기화
