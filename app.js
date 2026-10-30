@@ -12,6 +12,7 @@ const steps = ['select', 'review', 'compat', 'guide', 'action'];
 let currentStep = 'select';
 let washResult = {};
 let guideResultInputs = {};
+let projectPurpose = '';
 
 // 원단 카드 설정 (UI 프리젠테이션)
 const selectionCards = [
@@ -59,6 +60,7 @@ $('#home-link').addEventListener('click', () => {
   if (!busy) {
     selected.clear();
     invalidate();
+    projectPurpose = '';
     switchStep('select');
     renderFabrics();
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -122,10 +124,11 @@ function renderReview() {
       <div>
         <span class="review-eyebrow">조합 준비</span>
         <h2>선택한 원단을 확인하세요</h2>
-        <p>선택한 원단의 DB 프로필과 시험 특성을 바탕으로 조합을 살펴볼게요.</p>
+        <p>선택한 원단의 참고 정보와 연구 기록을 확인하세요.</p>
       </div>
       <span class="review-count">${list.length}<small>개 선택</small></span>
-    </div>`;
+    </div><div class="purpose-panel"><label for="project-purpose">제작 목적 <span class="field-required">선택</span></label><input id="project-purpose" type="text" maxlength="100" value="${escape(projectPurpose)}" placeholder="예: 헌 청바지와 바람막이로 가방 만들기"><p>제작 메모로 사용합니다. 현재 테스트 항목은 목적이 아닌 원단의 연구 기록을 기준으로 표시됩니다.</p></div>`;
+  $('#project-purpose').addEventListener('input', e=>{projectPurpose=e.target.value;});
 
   if (list.length === 0) {
     $('#selected-fabrics').innerHTML = `
@@ -169,13 +172,13 @@ function renderReview() {
               <span class="review-disclosure-hint">DB 상세</span>
             </summary>
             <div class="review-research-body">
-              <p class="review-reference-note">Supabase DB 카탈로그 정보입니다. 조사자: ${escape(f.investigator || '미상')} (${escape(f.investigation_date || '')})</p>
+              <p class="review-reference-note">${f.data_origin === 'database' ? 'DB에서 불러온 원단 정보입니다.' : 'DB 연결이 없는 경우 표시하는 임시 참고자료입니다.'} 개별 기록의 출처와 조건은 별도 확인이 필요합니다. 실제 원단의 실측값이나 관리 표시를 대신하지 않습니다. 조사자: ${escape(f.investigator || '미상')} (${escape(f.investigation_date || '')})</p>
               ${p.care_guide ? `<p><strong>세탁 및 관리:</strong> ${escape(p.care_guide)}</p>` : ''}
               ${p.shrinkage_detail ? `<p><strong>수축 특성:</strong> ${escape(p.shrinkage_detail)}</p>` : ''}
               ${p.dye_transfer_detail ? `<p><strong>이염 특성:</strong> ${escape(p.dye_transfer_detail)}</p>` : ''}
               ${p.other_characteristics ? `<p><strong>기타 특성:</strong> ${escape(p.other_characteristics)}</p>` : ''}
 
-              <h4>공인 시험 및 논문 실험 데이터 (${tests.length}건)</h4>
+              <h4>시험 및 조사 참고자료 (${tests.length}건)</h4>
               <div class="modal-tests-list">
                 ${tests.map(t => `
                   <div class="test-item-card">
@@ -260,159 +263,15 @@ async function analyze() {
 function renderCompat() {
   if (!analysis) return;
   const { fabrics: chosenFabrics, pairs, avgScore } = analysis;
-
-  const scoreVal = avgScore;
-  let statusLabel = '양호한 조합';
-  if (scoreVal >= 80) statusLabel = '우수한 조합';
-  else if (scoreVal >= 60) statusLabel = '조건부 양호 (주의 필요)';
-  else statusLabel = '주의 요망 (조합 주의)';
-
-  const fabricChip = f => {
-    const card = selectionCards.find(c => c.id === f.id);
-    return `<span class="result-fabric-chip"><i style="background:${card?.color || f.color || '#bbb'}"></i>${escape(f.name)}</span>`;
-  };
-
-  // 항목별 점수 산출
-  const metrics = [
-    { label: '종합 적합도', score: scoreVal, note: '원단 쌍별 매트릭스 평균' },
-    { label: '세탁·수축 호환성', score: Math.max(0, Math.min(100, scoreVal - 2)), note: '수축률 차이 기반' },
-    { label: '내구성 및 봉제 적합', score: Math.max(0, Math.min(100, scoreVal + 3)), note: '인장강도 및 직조 구조' },
-    { label: '이염 및 관리 호환', score: Math.max(0, Math.min(100, scoreVal - 4)), note: '염료 및 세탁 조건 일치도' },
-  ];
-
-  // 주의사항 목록
-  const warnings = pairs.filter(p => p.level !== 'good').map(p => ({
-    message: `${p.nameA} ↔ ${p.nameB}: ${p.summary} — ${p.detail}`
-  }));
-
-  let h = `
-    <div class="compat-intro">
-      <span class="review-eyebrow">조합 분석 결과</span>
-      <h2>제작 전, 함께 확인해보세요</h2>
-      <p>${chosenFabrics.length}개 원단 · ${pairs.length}개 조합 분석 완료</p>
-    </div>
-
-    <div class="result-fabric-chips">
-      ${chosenFabrics.map(fabricChip).join('<span class="result-plus">+</span>')}
-    </div>
-
-    <section class="compat-hero">
-      <div class="compat-score-ring" style="--score:${scoreVal}">
-        <div>
-          <strong>${scoreVal}</strong>
-          <span>/ 100점</span>
-        </div>
-      </div>
-      <div class="compat-hero-copy">
-        <span class="compat-draft">Supabase DB 프로필 기반 분석</span>
-        <h3>조합 적합도 종합 평가</h3>
-        <span class="compat-status">${escape(statusLabel)}</span>
-        <p>PostgreSQL 데이터베이스에 등록된 원단 6종의 공인 시험 기준과 물성 특성을 반영한 호환성 지표입니다.</p>
-        <div class="compat-coverage">
-          <span>데이터 신뢰도</span>
-          <strong>ISO / KS 공인 시험 표준 기반</strong>
-        </div>
-      </div>
-    </section>
-
-    <section class="compat-metrics">
-      <div class="compat-section-heading">
-        <h3>항목별 평가 점수</h3>
-        <span>물성 매트릭스 반영</span>
-      </div>
-      ${metrics.map(m => `
-        <div class="compat-metric">
-          <div class="compat-metric-label">
-            <strong>${escape(m.label)}</strong>
-            <small>${escape(m.note)}</small>
-          </div>
-          <div class="compat-track" role="progressbar" aria-valuenow="${m.score}" aria-valuemin="0" aria-valuemax="100">
-            <span style="width:${m.score}%"></span>
-          </div>
-          <span class="compat-metric-score">${m.score}<small>점</small></span>
-        </div>
-      `).join('')}
-      <p class="compat-not-scored">각 점수는 원단의 물리·화학적 특성 차이 및 가공 상태에 따라 실제 시험 시 변동될 수 있습니다.</p>
-    </section>
-
-    <section class="compat-pairs">
-      <div class="compat-section-heading">
-        <h3>원단 쌍별 확인</h3>
-        <span>${pairs.length}개 조합</span>
-      </div>
-      ${pairs.map(p => `
-        <article class="compat-pair">
-          <div class="compat-pair-heading">
-            <div>
-              <span>${escape(p.nameA)}</span>
-              <span class="pair-link">↔</span>
-              <span>${escape(p.nameB)}</span>
-            </div>
-            <strong>${p.score}<small>점</small></strong>
-          </div>
-          <p class="compat-pair-meta">${p.level === 'good' ? '양호한 호환성' : (p.level === 'bad' ? '주의 요망 조합' : '관리 조건 상이')}</p>
-          <details>
-            <summary>호환성 요약 및 세부 분석</summary>
-            <div class="compat-pair-evidence">
-              <div>
-                <strong>핵심 특성: <span>${escape(p.summary)}</span></strong>
-                <p>${escape(p.detail)}</p>
-              </div>
-            </div>
-          </details>
-        </article>
-      `).join('')}
-    </section>
-
-    ${warnings.length > 0 ? `
-      <section class="compat-next-checks">
-        <div class="compat-section-heading">
-          <h3>제작 전 확인할 사항</h3>
-          <span>${warnings.length}개</span>
-        </div>
-        ${warnings.map(w => `
-          <div class="compat-warning">
-            <span aria-hidden="true">!</span>
-            <p>${escape(w.message)}</p>
-          </div>
-        `).join('')}
-      </section>
-    ` : ''}
-
-    <section class="compat-tests">
-      <div class="compat-section-heading">
-        <h3>다음으로 확인할 4단계 테스트</h3>
-      </div>
-      <div class="compat-test-grid">
-        <div>
-          <span aria-hidden="true">📏</span>
-          <strong>수축률 비교 테스트</strong>
-          <p>세탁 후 각 원단 간 치수 변화 차이를 측정하여 접합부 퍼커링을 예방합니다.</p>
-        </div>
-        <div>
-          <span aria-hidden="true">🎨</span>
-          <strong>이염 및 변퇴색 확인</strong>
-          <p>세탁 시 인디고 또는 산성염료의 이염 여부와 첨부포 오염을 확인합니다.</p>
-        </div>
-        <div>
-          <span aria-hidden="true">🌊</span>
-          <strong>세탁 안정성 테스트</strong>
-          <p>반복 세탁 후 결합부의 외관 변형, 올풀림, 형태 유지를 관찰합니다.</p>
-        </div>
-        <div>
-          <span aria-hidden="true">💪</span>
-          <strong>봉제 인장 강도</strong>
-          <p>서로 다른 두께와 직조를 가진 원단 접합선의 파단 강도를 평가합니다.</p>
-        </div>
-      </div>
-    </section>
-
-    <div class="review-actions compat-actions">
-      <button class="review-back" onclick="switchStep('review')">← 선택 정보 확인</button>
-      <button class="btn btn-primary" onclick="switchStep('guide')">4단계 테스트 가이드 <span aria-hidden="true">→</span></button>
-    </div>`;
-
-  $('#compat-content').innerHTML = h;
+  const chip = f => { const card=selectionCards.find(c=>c.id===f.id);return `<span class="result-fabric-chip"><i style="background:${card?.color || f.color || '#bbb'}"></i>${escape(f.name)}</span>`; };
+  const origin = p => p.score_origin==='database'?'DB에 사전 등록된 점수':p.score_origin==='default'?'자료 없어 지정한 기본값':'화면에 포함된 임시 점수';
+  $('#compat-content').innerHTML=`<div class="compat-intro"><span class="review-eyebrow">제작 전 확인</span><h2>원단 조합을 살펴보세요</h2><p>${chosenFabrics.length}개 원단 · ${pairs.length}개 조합</p></div>
+  <div class="result-fabric-chips">${chosenFabrics.map(chip).join('<span class="result-plus">+</span>')}</div>
+  <section class="compat-hero"><div class="compat-score-ring" style="--score:${Number(avgScore)}"><div><strong>${escape(avgScore)}</strong><span>/ 100점</span></div></div><div class="compat-hero-copy"><span class="compat-draft">기획용 임시 지표 · 검증 전</span><h3>조합별 등록 점수 평균</h3><p>두 원단씩 미리 정해진 점수의 평균입니다. 실제 선택 원단을 측정한 점수, 공인 시험 결과 또는 제작 성공 가능성이 아닙니다.</p><p>자료가 없으면 기본 점수 50이 포함될 수 있어요. 점수만으로 사용 가능 여부를 판단하지 마세요.</p></div></section>
+  <section class="compat-pairs"><div class="compat-section-heading"><h3>원단 조합별 참고 정보</h3><span>${pairs.length}개 조합</span></div>${pairs.map(p=>`<article class="compat-pair"><div class="compat-pair-heading"><div><span>${escape(p.nameA)}</span><span class="pair-link">↔</span><span>${escape(p.nameB)}</span></div><strong>${escape(p.score)}<small>점</small></strong></div><p class="compat-pair-meta">${escape(origin(p))} · 검증되지 않은 기획값</p><p class="compat-pair-meta">소재와 가공 상태에 따른 실제 변화는 4단계의 DB 근거와 시편 확인이 필요합니다.</p></article>`).join('')}</section>
+  <section class="compat-tests"><div class="compat-section-heading"><h3>다음 단계에서 확인해요</h3></div><p>원단별 연구 DB 기록을 바탕으로 수축·이염·색 변화와 관련된 확인 항목을 찾아볼 수 있습니다. 원단의 관리 표시와 실제 시험을 우선하세요.</p></section>
+  <details class="compat-method"><summary>점수의 계산 방식과 한계</summary><div><p>선택한 원단을 두 개씩 짝지어 사전에 등록된 점수를 조회하고, 모든 조합 점수의 평균을 반올림합니다. 각 조합 점수의 검증된 환산 기준은 확인되지 않았습니다.</p><p>3페이지 점수는 4페이지 연구 DB의 실제 수축률이나 이염 실험값을 계산한 것이 아니며 ISO·KS 공인 점수가 아닙니다. 가공·색상·관리 조건에 따라 실제 원단의 특성은 달라질 수 있습니다.</p></div></details>
+  <div class="review-actions compat-actions"><button class="review-back" onclick="switchStep('review')">← 선택 정보 확인</button><button class="btn btn-primary" onclick="switchStep('guide')">4단계 테스트 가이드 <span aria-hidden="true">→</span></button></div>`;
 }
 
 // ============================================================
@@ -480,6 +339,15 @@ function guideComparedConditions(item,names,sources){
   const columns=item.perFabric.map((records,i)=>`<section class="guide-compare-fabric"><h5>${escape(names[i])}</h5>${records.length?records.map(record=>guideStudyCondition(record,sources)).join(''):'<p>해당 항목의 DB 기록이 없어 시험 조건을 확인할 수 없어요.</p>'}</section>`).join('');
   return `<div class="guide-method guide-comparison"><div class="guide-method-label">DB에 기록된 원단별 시험 조건</div><p>각 연구의 조건을 따로 보여드려요. 없는 시험 단계는 임의로 추가하지 않았습니다.</p><div class="guide-compare-grid">${columns}</div><p class="guide-compare-result"><strong>차이와 미확인:</strong> ${escape(guideConditionDifferences(item))}</p><p class="guide-compare-result">기록된 조건이 같거나 유사해 보여도 실제 원단의 공통 관리 방법이 확인된 것은 아닙니다. ‘미기재’는 안전하다는 뜻이 아닙니다.</p></div>`;
 }
+function historyPanel(){return `<details class="guide-history"><summary>저장한 테스트 기록 보기</summary><p>이 브라우저에만 저장됩니다. 브라우저 데이터를 삭제하거나 다른 기기를 사용하면 기록을 볼 수 없습니다. 5페이지로 전송되지 않습니다.</p><div data-history-list></div></details>`;}
+function renderSavedHistory(target){
+  const list=target.querySelector('[data-history-list]');if(!list)return;
+  try{
+    const records=TestRecordStore.read(localStorage);
+    list.innerHTML=records.length?records.map(record=>`<article class="history-record"><div><strong>${escape(Array.isArray(record.pair)?record.pair.join(' + '):'원단 조합')}</strong><p>${escape(record.label || record.property)} · ${escape(record.value)}${record.property==='shrinkage'?' %포인트':''}</p>${record.purpose?`<p>제작 목적: ${escape(record.purpose)}</p>`:''}${record.notes?`<p>조건·메모: ${escape(record.notes)}</p>`:''}<small>${escape(new Date(record.createdAt).toLocaleString('ko-KR'))}</small></div><button type="button" class="btn btn-ghost" data-record-delete="${escape(record.id)}" aria-label="${escape(record.label || '테스트')} 기록 삭제">삭제</button></article>`).join(''):'<p>저장한 기록이 없습니다.</p>';
+    list.querySelectorAll('[data-record-delete]').forEach(button=>button.addEventListener('click',()=>{try{TestRecordStore.remove(localStorage,button.dataset.recordDelete);renderSavedHistory(target);}catch(error){list.insertAdjacentText('beforeend',` 기록을 삭제하지 못했습니다: ${error.message}`);}}));
+  }catch(error){list.textContent=`기록을 불러오지 못했습니다: ${error.message}`;}
+}
 async function renderEvidenceGuide(target){
   const snapshot=analysis;const ids=snapshot.fabrics.map(f=>f.id);
   target.innerHTML='<div class="guide-intro"><h2>🧪 조합별 테스트 확인</h2><p role="status">원단별 연구 DB를 확인하고 있어요...</p></div>';
@@ -496,16 +364,23 @@ async function renderEvidenceGuide(target){
         if(!protocol)return '';
         const resultKey=pairIds.join('-')+'-'+item.property;
         const entered=guideResultInputs[resultKey] || {};
-        const input=protocol.inputType==='number'?`<input type="number" min="0" step="any" inputmode="decimal" data-guide-result="${escape(resultKey)}" value="${escape(entered.value??'')}" placeholder="예: 3">`:`<select data-guide-result="${escape(resultKey)}"><option value="">선택하세요</option>${[['관찰됨','변화 또는 색 묻음이 관찰됨'],['관찰되지 않음','변화 또는 색 묻음이 관찰되지 않음'],['판단 어려움','판단하기 어려움']].map(([v,label])=>`<option value="${escape(v)}" ${entered.value===v?'selected':''}>${escape(label)}</option>`).join('')}</select>`;
-        return `<article class="guide-card guide-test"><div class="guide-header"><span class="guide-icon" aria-hidden="true">${protocol.icon}</span><div><span class="guide-badge">DB 기록 기반 추천 · 참고 관찰</span><h4 class="guide-title">${index+1}. ${escape(item.label)}</h4></div></div><p class="guide-desc">${escape(protocol.summary)}</p><div class="guide-why"><strong>추천 이유 · 원단별 DB 기록</strong><p>${why}</p><p>DB 기록은 연구 시료의 결과이며 실제 원단에 그대로 적용하지 않습니다.</p></div><div class="guide-method"><div class="guide-method-label">준비물</div><p>${escape(protocol.supplies)}</p><div class="guide-method-label guide-step-title">진행 순서</div><ol>${protocol.steps.map(step=>`<li>${escape(step)}</li>`).join('')}</ol></div><p class="guide-caution">${escape(protocol.note)}</p><p class="guide-method-source">진행 순서는 DB 원문이 아닌 서비스에서 새로 작성한 가정용 참고 안내입니다. <a href="${escape(protocol.source)}" target="_blank" rel="noopener noreferrer">방법 참고자료: ${escape(protocol.sourceLabel)}</a></p><div class="guide-input-group guide-result-input"><label>${escape(protocol.inputLabel)}<span class="guide-result-control">${input}</span></label><label for="notes-${escape(resultKey)}">실제 조건 및 관찰 메모 <span>(선택)</span></label><textarea id="notes-${escape(resultKey)}" data-guide-notes="${escape(resultKey)}" rows="2" maxlength="1000" placeholder="온도, 세제, 횟수, 건조 방식 등">${escape(entered.notes??'')}</textarea><small>입력값은 이 탭에서만 유지되며 저장되지 않고 5페이지에 전달되지 않습니다.</small></div><details class="guide-evidence"><summary>원단별 DB 연구 조건과 출처 보기</summary>${guideComparedConditions(item,pairIds.map(name),sources)}<p>각 기록의 결과는 연구 시료의 결과이며 실제 선택 원단의 측정값이 아닙니다.</p>${records}</details></article>`;
+        const observations=item.property==='staining'?[['관찰됨','흰 천에 색이 묻음'],['관찰되지 않음','흰 천에 색이 묻지 않음'],['판단 어려움','판단하기 어려움']]:[['관찰됨','색이나 표면 변화가 보임'],['관찰되지 않음','색이나 표면 변화가 보이지 않음'],['판단 어려움','판단하기 어려움']];
+        const input=protocol.inputType==='number'?`<input type="number" min="0" step="any" inputmode="decimal" data-guide-result="${escape(resultKey)}" value="${escape(entered.value??'')}" placeholder="예: 3">`:`<select data-guide-result="${escape(resultKey)}"><option value="">선택하세요</option>${observations.map(([v,label])=>`<option value="${escape(v)}" ${entered.value===v?'selected':''}>${escape(label)}</option>`).join('')}</select>`;
+        return `<article class="guide-card guide-test"><div class="guide-header"><span class="guide-icon" aria-hidden="true">${protocol.icon}</span><div><span class="guide-badge">DB 기록 기반 추천 · 참고 관찰</span><h4 class="guide-title">${index+1}. ${escape(item.label)}</h4></div></div><p class="guide-desc">${escape(protocol.summary)}</p><div class="guide-why"><strong>추천 이유 · 원단별 DB 기록</strong><p>${why}</p><p>DB 기록은 연구 시료의 결과이며 실제 원단에 그대로 적용하지 않습니다.</p></div><div class="guide-method"><div class="guide-method-label">준비물</div><p>${escape(protocol.supplies)}</p><div class="guide-method-label guide-step-title">진행 순서</div><ol>${protocol.steps.map(step=>`<li>${escape(step)}</li>`).join('')}</ol></div><p class="guide-caution">${escape(protocol.note)}</p><p class="guide-method-source">진행 순서는 DB 원문이 아닌 서비스에서 새로 작성한 가정용 참고 안내입니다. <a href="${escape(protocol.source)}" target="_blank" rel="noopener noreferrer">방법 참고자료: ${escape(protocol.sourceLabel)}</a></p><div class="guide-input-group guide-result-input"><label>${escape(protocol.inputLabel)}<span class="guide-result-control">${input}</span></label><label for="notes-${escape(resultKey)}">실제 조건 및 관찰 메모 <span>(선택)</span></label><textarea id="notes-${escape(resultKey)}" data-guide-notes="${escape(resultKey)}" rows="2" maxlength="1000" placeholder="온도, 세제, 횟수, 건조 방식 등">${escape(entered.notes??'')}</textarea><button type="button" class="btn btn-ghost guide-save" data-guide-save="${escape(resultKey)}" data-pair-index="${pairIndex}" data-property="${escape(item.property)}">이 브라우저에 기록 저장</button><small>저장 버튼을 누르면 이 브라우저에만 남습니다. 5페이지로 전송되지 않습니다.</small><p role="status" data-save-status="${escape(resultKey)}"></p></div><details class="guide-evidence"><summary>원단별 DB 연구 조건과 출처 보기</summary>${guideComparedConditions(item,pairIds.map(name),sources)}<p>각 기록의 결과는 연구 시료의 결과이며 실제 선택 원단의 측정값이 아닙니다.</p>${records}</details></article>`;
       }).join('');
       return `<details class="guide-pair" ${pairIndex===0?'open':''}><summary><span>원단 조합 ${pairIndex+1}</span><strong>${pairIds.map(id=>escape(name(id))).join(' + ')}</strong><small>${items.length}개 확인 항목</small></summary><p class="guide-pair-desc">선택한 원단에 관련 DB 연구 기록이 있는 항목을 조합별로 추천해요. 수축률은 두 원단을 한 카드에서 비교합니다.</p>${cards||'<div class="guide-card"><p>선택한 원단에서 관련 DB 연구 기록을 찾지 못했습니다. 기록되지 않은 시험은 표시하지 않습니다.</p></div>'}</details>`;
     }).join('');
-    target.innerHTML=`<div class="guide-intro"><h2>🧪 원단 조합별 테스트 가이드</h2><p>선택한 원단의 DB 연구 기록이 있는 항목을 조합별로 추천합니다. 같은 종류의 시험은 원단 두 장을 하나의 카드에서 확인해요.</p><p>진행 순서는 서비스가 새로 작성한 가정용 참고 안내입니다. DB 연구 절차나 공인 시험과 다르며 실제 원단의 관리 표시와 공통 세탁·건조 방법을 먼저 확인하세요.</p></div>${pairs}<div class="action-bar"><button type="button" class="btn btn-ghost" data-guide-back>← 호환성 결과</button><button type="button" class="btn btn-primary" data-guide-next>5단계 조치 확인 →</button></div>`;
-    target.querySelectorAll('[data-guide-result],[data-guide-notes]').forEach(field=>field.addEventListener('input',()=>{const isResult=field.hasAttribute('data-guide-result');const key=isResult?field.dataset.guideResult:field.dataset.guideNotes;guideResultInputs[key]={...(guideResultInputs[key]||{}),[isResult?'value':'notes']:field.value};}));
+    target.innerHTML=`<div class="guide-intro"><h2>🧪 원단 조합별 테스트 가이드</h2><p>선택한 원단의 DB 연구 기록이 있는 항목을 조합별로 추천합니다. 같은 종류의 시험은 원단 두 장을 하나의 카드에서 확인해요.</p><p>진행 순서는 서비스가 새로 작성한 가정용 참고 안내입니다. DB 연구 절차나 공인 시험과 다르며 실제 원단의 관리 표시와 공통 세탁·건조 방법을 먼저 확인하세요.</p></div>${historyPanel()}${pairs}<div class="action-bar"><button type="button" class="btn btn-ghost" data-guide-back>← 호환성 결과</button><button type="button" class="btn btn-primary" data-guide-next>5단계 조치 확인 →</button></div>`;
+    target.querySelectorAll('[data-guide-result],[data-guide-notes]').forEach(field=>field.addEventListener('input',()=>{const isResult=field.hasAttribute('data-guide-result');const key=isResult?field.dataset.guideResult:field.dataset.guideNotes;guideResultInputs[key]={...(guideResultInputs[key]||{}),[isResult?'value':'notes']:field.value};const status=field.closest('.guide-result-input').querySelector('[data-save-status]');if(status)status.textContent='';}));
+    renderSavedHistory(target);
+    target.querySelectorAll('[data-guide-save]').forEach(button=>button.addEventListener('click',()=>{
+      const key=button.dataset.guideSave;const item=guideResultInputs[key]||{};const pair=snapshot.pairs[Number(button.dataset.pairIndex)];const property=button.dataset.property;
+      const status=button.closest('.guide-result-input').querySelector('[data-save-status]');
+      try{const protocol=GuideProtocols[property];if(!pair||!protocol)throw new Error('원단 조합을 확인할 수 없습니다.');TestRecordStore.save(localStorage,{pair:[pair.nameA,pair.nameB],property,label:protocol.inputLabel,value:String(item.value??''),notes:String(item.notes??''),purpose:projectPurpose.trim()});status.textContent='이 브라우저에 저장했습니다.';renderSavedHistory(target);}catch(error){status.textContent=`저장하지 못했습니다: ${error.message}`;}
+    }));
     target.querySelector('[data-guide-back]').addEventListener('click',()=>switchStep('compat'));
     target.querySelector('[data-guide-next]').addEventListener('click',()=>switchStep('action'));
-  }catch(error){if(snapshot!==analysis||currentStep!=='guide')return;target.innerHTML=`<div class="guide-intro" role="alert"><h2>시험 자료를 불러오지 못했어요</h2><p>${escape(error.message)}. 임의의 테스트를 대신 표시하지 않습니다.</p><button class="btn btn-primary" data-guide-retry>다시 시도</button> <button class="btn btn-ghost" data-guide-back>← 호환성 결과</button> <button class="btn btn-primary" data-guide-next>5단계 조치 확인 →</button></div>`;target.querySelector('[data-guide-retry]').addEventListener('click',()=>renderEvidenceGuide(target));target.querySelector('[data-guide-back]').addEventListener('click',()=>switchStep('compat'));target.querySelector('[data-guide-next]').addEventListener('click',()=>switchStep('action'));}
+  }catch(error){if(snapshot!==analysis||currentStep!=='guide')return;target.innerHTML=`<div class="guide-intro" role="alert"><h2>시험 자료를 불러오지 못했어요</h2><p>${escape(error.message)}. 임의의 테스트를 대신 표시하지 않습니다.</p>${historyPanel()}<button class="btn btn-primary" data-guide-retry>다시 시도</button> <button class="btn btn-ghost" data-guide-back>← 호환성 결과</button> <button class="btn btn-primary" data-guide-next>5단계 조치 확인 →</button></div>`;renderSavedHistory(target);target.querySelector('[data-guide-retry]').addEventListener('click',()=>renderEvidenceGuide(target));target.querySelector('[data-guide-back]').addEventListener('click',()=>switchStep('compat'));target.querySelector('[data-guide-next]').addEventListener('click',()=>switchStep('action'));}
 }
 
 // 5페이지는 main 브랜치의 조치 카드와 규칙을 사용합니다.
@@ -594,6 +469,7 @@ function renderActions(actions) {
 function restartAll() {
   selected.clear();
   invalidate();
+  projectPurpose = '';
   switchStep('select');
   renderFabrics();
   window.scrollTo({ top: 0, behavior: 'smooth' });

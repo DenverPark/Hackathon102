@@ -438,12 +438,12 @@ const API = (() => {
     if (supabase) {
       try {
         const { data, error } = await supabase.from('fabrics').select('*');
-        if (!error && data && data.length > 0) return data;
+        if (!error && data && data.length > 0) return data.map(f => ({...f, data_origin:'database'}));
       } catch (e) {
         console.warn('Supabase getFabrics 실패, 로컬 캐시 사용:', e);
       }
     }
-    return structuredClone(_fabrics);
+    return structuredClone(_fabrics).map(f => ({...f, data_origin:'local_example'}));
   }
 
   /** ID로 원단 상세 정보 조회 */
@@ -483,7 +483,7 @@ const API = (() => {
           .eq('fabric_a_id', minId)
           .eq('fabric_b_id', maxId)
           .single();
-        if (!error && data) return data;
+        if (!error && data) return {...data, score_origin:'database'};
       } catch (e) {
         console.warn('Supabase getCompatibility 실패, 로컬 캐시 사용:', e);
       }
@@ -495,7 +495,7 @@ const API = (() => {
       summary: '조합 데이터 참조',
       detail: '해당 원단 조합의 표준 봉제 및 세탁 시 주의가 필요합니다.',
     };
-    return { ...data, fabric_a_id: minId, fabric_b_id: maxId };
+    return { ...data, fabric_a_id: minId, fabric_b_id: maxId, score_origin: _compatibility[key] ? 'local_example' : 'default' };
   }
 
   /** 선택된 원단들에 대한 전체 호환성 분석 */
