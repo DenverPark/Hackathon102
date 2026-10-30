@@ -564,3 +564,29 @@ html { scroll-padding-bottom: 100px; }
 #tab-guide .guide-record ul { padding-left: 20px; margin: 8px 0; }
 #tab-guide .guide-record summary { cursor: pointer; font-weight: 600; }
 #tab-guide .guide-caution { background: #fff9ec; color: #745a32; border-radius: 8px; padding: 12px; font-size: 13px; line-height: 1.65; }
+/* Readable test guides, adapted from the main-branch card layout. */
+#tab-guide .guide-pair { background: transparent; margin: 24px 0; }
+#tab-guide .guide-pair > summary { cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; background: #fff; border-radius: 12px; padding: 16px 18px; list-style: none; }
+#tab-guide .guide-pair > summary::-webkit-details-marker { display: none; }
+#tab-guide .guide-pair > summary span { grid-column: 1 / -1; font-size: 12px; font-weight: 700; color: #68788a; }
+#tab-guide .guide-pair > summary strong { font-size: 16px; color: #24354a; }
+#tab-guide .guide-pair > summary small { color: #596b80; align-self: center; }
+#tab-guide .guide-pair > summary::after { content: '펼치기'; color: #0071e3; font-size: 12px; }
+#tab-guide .guide-pair[open] > summary::after { content: '접기'; }
+#tab-guide .guide-pair-desc { margin: 12px 2px; line-height: 1.6; }
+#tab-guide .guide-test .guide-title { margin-top: 3px; line-height: 1.4; }
+#tab-guide .guide-badge { color: #1769aa; background: #edf6ff; font-size: 11px; font-weight: 700; border-radius: 5px; padding: 3px 7px; }
+#tab-guide .guide-selection { color: #68788a; font-size: 12px; margin: 0 0 14px; line-height: 1.6; }
+#tab-guide .guide-method { font-size: 14px; line-height: 1.75; }
+#tab-guide .guide-method p { margin: 0; }
+#tab-guide .guide-step-title { margin-top: 16px; }
+#tab-guide .guide-method li { margin-bottom: 10px; }
+#tab-guide .guide-method-source { font-size: 12px; color: #68788a; margin: 10px 0; overflow-wrap: anywhere; }
+#tab-guide .guide-evidence { border-top: 1px solid #e4e8ee; padding-top: 12px; font-size: 13px; line-height: 1.65; }
+#tab-guide .guide-evidence > summary { cursor: pointer; font-weight: 700; color: #2465a8; }
+#tab-guide .guide-evidence > p { color: #68788a; margin: 10px 0; }
+#tab-guide .guide-fabric-record { background: #f5f7fa; padding: 12px; border-radius: 9px; margin-top: 10px; overflow-wrap: anywhere; }
+#tab-guide .guide-fabric-record h5 { font-size: 14px; }
+#tab-guide .guide-record { border: 0; padding: 0; }
+#tab-guide .guide-intro p { line-height: 1.7; }
+@media (max-width: 520px) { #tab-guide .guide-pair > summary { padding: 14px; } #tab-guide .guide-card { padding: 16px; } }
