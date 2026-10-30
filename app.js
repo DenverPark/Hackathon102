@@ -446,14 +446,17 @@ function guideStatus(status){
   const labels={quantitative_source_unverified:'연구 수치의 원출처 연결 미확인',source_material_mismatch:'인용 출처와 원단이 맞지 않아 추가 확인 필요',primary_source_conflict:'원문과 조사자료 조건이 달라 추가 확인 필요',primary_protocol_verified:'원문 시험 조건 확인됨',provided_document:'제공된 조사자료 기록'};
   return status ? (labels[status] || status) : '별도 검증 상태 미기재';
 }
-function guideStudyCondition(record){
+function guideStudyCondition(record,sources){
   const c=record.conditions || {};
   const read=value=>value===null||value===undefined||value===''?'미기재':guideValue(value);
   const temperature=c.wash_temp_c_conflicting ? `서로 다른 기록: ${read(c.wash_temp_c_conflicting)} ℃` : (c.wash_temp_c===null||c.wash_temp_c===undefined ? '미기재' : `${read(c.wash_temp_c)} ℃`);
   const minutes=c.wash_minutes===null||c.wash_minutes===undefined?'미기재':`${read(c.wash_minutes)} 분`;
   const dry=c.drying ?? c.drying_alternatives;
+  const source=sources.find(item=>item.id===record.source_id);
+  let sourceUrl='';try{const u=new URL(source?.url);if(u.protocol==='https:'||u.protocol==='http:')sourceUrl=u.href;}catch{}
+  const detergent=c.detergent ?? (c.detergent_g===null||c.detergent_g===undefined?null:`${c.detergent_g} g (연구 시료)`);
   const type=record.property==='felting_shrinkage'?'펠팅 수축 (일반 길이 수축과 구분)':record.property==='shrinkage'?'세탁 후 길이 변화':record.property==='staining'?'이염':'색상 변화';
-  return `<div class="guide-study"><p><strong>DB 기록:</strong> ${escape(type)}</p><p><strong>연구 시료:</strong> ${escape(record.sample_description||'미기재')}</p><dl><div><dt>세탁 온도</dt><dd>${escape(temperature)}</dd></div><div><dt>세탁 시간</dt><dd>${escape(minutes)}</dd></div><div><dt>건조 방법</dt><dd>${escape(read(dry))}</dd></div><div><dt>세탁 횟수</dt><dd>${escape(read(c.cycles))}</dd></div><div><dt>세제</dt><dd>${escape(read(c.detergent))}</dd></div></dl><p><strong>검증 상태:</strong> ${escape(guideStatus(c.verification_status))}</p><p><strong>적용 제한:</strong> ${escape(record.applicability||'별도 제한 미기재')}</p></div>`;
+  return `<div class="guide-study"><p><strong>DB 기록:</strong> ${escape(type)}</p><p><strong>연구 시료:</strong> ${escape(record.sample_description||'미기재')}</p><dl><div><dt>세탁 온도</dt><dd>${escape(temperature)}</dd></div><div><dt>세탁 시간</dt><dd>${escape(minutes)}</dd></div><div><dt>건조 방법</dt><dd>${escape(read(dry))}</dd></div><div><dt>세탁 횟수</dt><dd>${escape(read(c.cycles))}</dd></div><div><dt>세제</dt><dd>${escape(read(detergent))}</dd></div><div><dt>시험 기준</dt><dd>${escape(read(c.standards_reported))}</dd></div></dl><p><strong>출처:</strong> ${sourceUrl?`<a href="${escape(sourceUrl)}" target="_blank" rel="noopener noreferrer">${escape(source.title)}</a>`:escape(source?.title||'출처 확인 필요')}</p><p><strong>검증 상태:</strong> ${escape(guideStatus(c.verification_status))}</p><p><strong>적용 제한:</strong> ${escape(record.applicability||'별도 제한 미기재')}</p></div>`;
 }
 function guideConditionDifferences(item){
   const all=item.perFabric.flat();
@@ -471,9 +474,9 @@ function guideConditionDifferences(item){
   if(missing.length)lines.push(`${missing.join('·')} 정보가 일부 없거나 확인되지 않았습니다.`);
   return lines.length?lines.join(' '):'기록이 존재해도 시료와 처리 조건이 같다는 뜻은 아닙니다.';
 }
-function guideComparedConditions(item,names){
-  const columns=item.perFabric.map((records,i)=>`<section class="guide-compare-fabric"><h5>${escape(names[i])}</h5>${records.length?records.map(guideStudyCondition).join(''):'<p>해당 항목의 DB 기록이 없어 시험 조건을 확인할 수 없어요.</p>'}</section>`).join('');
-  return `<div class="guide-comparison"><h5>원단별 DB 시험 기록</h5><p>각 연구 조건을 따로 표시합니다. 다른 시료의 수치를 직접 비교하거나 세탁 조건을 합치지 마세요.</p><div class="guide-compare-grid">${columns}</div><p class="guide-compare-result"><strong>차이와 미확인:</strong> ${escape(guideConditionDifferences(item))}</p><p class="guide-compare-result">기록된 조건이 같거나 유사해 보여도 실제 원단의 공통 관리 방법이 확인된 것은 아닙니다. ‘미기재’는 안전하다는 뜻이 아닙니다.</p></div>`;
+function guideComparedConditions(item,names,sources){
+  const columns=item.perFabric.map((records,i)=>`<section class="guide-compare-fabric"><h5>${escape(names[i])}</h5>${records.length?records.map(record=>guideStudyCondition(record,sources)).join(''):'<p>해당 항목의 DB 기록이 없어 시험 조건을 확인할 수 없어요.</p>'}</section>`).join('');
+  return `<div class="guide-method guide-comparison"><div class="guide-method-label">DB에 기록된 원단별 시험 조건</div><p>각 연구의 조건을 따로 보여드려요. 없는 시험 단계는 임의로 추가하지 않았습니다.</p><div class="guide-compare-grid">${columns}</div><p class="guide-compare-result"><strong>차이와 미확인:</strong> ${escape(guideConditionDifferences(item))}</p><p class="guide-compare-result">기록된 조건이 같거나 유사해 보여도 실제 원단의 공통 관리 방법이 확인된 것은 아닙니다. ‘미기재’는 안전하다는 뜻이 아닙니다.</p></div>`;
 }
 async function renderEvidenceGuide(target){
   const snapshot=analysis;const ids=snapshot.fabrics.map(f=>f.id);
@@ -487,11 +490,11 @@ async function renderEvidenceGuide(target){
       const cards=items.map((item,index)=>{
         const records=pairIds.map((id,i)=>`<section class="guide-fabric-record"><h5>${escape(name(id))}</h5>${item.perFabric[i].length?item.perFabric[i].map(record=>guideRecord(record,sources)).join(''):'<p>이 항목의 DB 연구 기록이 없어요.</p>'}</section>`).join('');
         const why=pairIds.map((id,i)=>{const found=item.perFabric[i];if(!found.length)return `${escape(name(id))}: 관련 연구 기록이 없어요.`;const kinds=[...new Set(found.map(record=>record.property==='felting_shrinkage'?'펠팅 수축':item.label))];return `${escape(name(id))}: ${kinds.map(escape).join('·')} 관련 연구 기록 ${found.length}건`;}).join('<br>');
-        return `<article class="guide-card guide-test"><div class="guide-header"><span class="guide-icon" aria-hidden="true">🔬</span><div><span class="guide-badge">DB 연구 기록 · 확인 후보</span><h4 class="guide-title">${index+1}. ${escape(item.label)}</h4></div></div><div class="guide-why"><strong>DB 기록을 바탕으로 선택한 이유</strong><p>${why}</p><p>항목의 기록 여부로 찾은 확인 후보입니다. 자료의 정확성이나 가정에서의 시험 가능성이 검증됐다는 뜻은 아닙니다.</p></div>${guideComparedConditions(item,pairIds.map(name))}<p class="guide-caution">현재 DB에는 이 기록에 대응하는 완전한 시험명·시험 목적·단계별 절차가 별도 필드로 저장되어 있지 않습니다. 아래에 없는 절차나 조건을 추가하지 않았습니다. 실제 두 원단에 공통으로 적용할 수 있는 방법은 원문과 관리 표시를 확인하고 필요하면 시험기관에 문의하세요.</p><details class="guide-evidence"><summary>원단별 DB 조건·연구 결과·출처 보기</summary><p>각 기록의 결과는 연구 시료의 결과이며, 실제 선택 원단의 측정값이 아닙니다. 미검증 기록도 포함될 수 있습니다.</p>${records}</details></article>`;
+        return `<article class="guide-card guide-test"><div class="guide-header"><span class="guide-icon" aria-hidden="true">🔬</span><div><span class="guide-badge">DB 기록 기반 · 확인 후보</span><h4 class="guide-title">${index+1}. ${escape(item.label)}</h4></div></div><div class="guide-why"><strong>DB 기록을 바탕으로 선택한 이유</strong><p>${why}</p><p>항목의 기록 여부로 찾은 확인 후보입니다. 자료의 정확성이나 가정에서의 시험 가능성이 검증됐다는 뜻은 아닙니다.</p></div>${guideComparedConditions(item,pairIds.map(name),sources)}<p class="guide-caution">현재 DB에는 이 기록에 대응하는 완전한 시험명·시험 목적·단계별 절차가 별도 필드로 저장되어 있지 않습니다. 아래에 없는 절차나 조건을 추가하지 않았습니다. 실제 두 원단에 공통으로 적용할 수 있는 방법은 원문과 관리 표시를 확인하고 필요하면 시험기관에 문의하세요.</p><details class="guide-evidence"><summary>원단별 DB 조건·연구 결과·출처 보기</summary><p>각 기록의 결과는 연구 시료의 결과이며, 실제 선택 원단의 측정값이 아닙니다. 미검증 기록도 포함될 수 있습니다.</p>${records}</details></article>`;
       }).join('');
       return `<details class="guide-pair" ${pairIndex===0?'open':''}><summary><span>원단 조합 ${pairIndex+1}</span><strong>${pairIds.map(id=>escape(name(id))).join(' + ')}</strong><small>${items.length}개 확인 항목</small></summary><p class="guide-pair-desc">선택한 원단의 DB에 기록된 시험 항목을 보여드려요. 가정에서의 적용 가능성과 조합의 적합성은 확인되지 않았습니다.</p>${cards||'<div class="guide-card"><p>선택한 원단에서 관련 DB 연구 기록을 찾지 못했습니다. 기록되지 않은 시험은 표시하지 않습니다.</p></div>'}</details>`;
     }).join('');
-    target.innerHTML=`<div class="guide-intro"><h2>🧪 원단 조합별 DB 시험 기록</h2><p>선택한 원단의 DB 기록을 바탕으로 확인할 시험 항목을 보여드려요. 원단마다 기록된 연구 시료와 조건, 차이와 출처를 따로 확인할 수 있습니다.</p><p>현재 연결된 DB에는 완전한 시험명·목적·단계별 절차가 별도 저장되어 있지 않아 빈 내용을 생성하지 않습니다. 가정에서 진행할 수 있는지와 실제 적용 조건은 별도 확인이 필요합니다.</p></div>${pairs}<div class="action-bar"><button type="button" class="btn btn-ghost" data-guide-back>← 호환성 결과</button><button type="button" class="btn btn-primary" data-guide-next>5단계 조치 확인 →</button></div>`;
+    target.innerHTML=`<div class="guide-intro"><h2>🧪 원단 조합별 테스트 추천</h2><p>선택한 원단의 DB 시험 기록을 바탕으로 확인할 항목을 추천해요. 각 카드에서 원단별 연구 조건과 출처를 확인하세요.</p><p>현재 연결된 DB에는 완전한 시험명·목적·단계별 절차가 별도 저장되어 있지 않아 빈 내용을 생성하지 않습니다. 가정에서 진행할 수 있는지와 실제 적용 조건은 별도 확인이 필요합니다.</p></div>${pairs}<div class="action-bar"><button type="button" class="btn btn-ghost" data-guide-back>← 호환성 결과</button><button type="button" class="btn btn-primary" data-guide-next>5단계 조치 확인 →</button></div>`;
     target.querySelector('[data-guide-back]').addEventListener('click',()=>switchStep('compat'));
     target.querySelector('[data-guide-next]').addEventListener('click',()=>switchStep('action'));
   }catch(error){if(snapshot!==analysis||currentStep!=='guide')return;target.innerHTML=`<div class="guide-intro" role="alert"><h2>시험 자료를 불러오지 못했어요</h2><p>${escape(error.message)}. 임의의 테스트를 대신 표시하지 않습니다.</p><button class="btn btn-primary" data-guide-retry>다시 시도</button> <button class="btn btn-ghost" data-guide-back>← 호환성 결과</button> <button class="btn btn-primary" data-guide-next>5단계 조치 확인 →</button></div>`;target.querySelector('[data-guide-retry]').addEventListener('click',()=>renderEvidenceGuide(target));target.querySelector('[data-guide-back]').addEventListener('click',()=>switchStep('compat'));target.querySelector('[data-guide-next]').addEventListener('click',()=>switchStep('action'));}
