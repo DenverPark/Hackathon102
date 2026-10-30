@@ -5,36 +5,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>원단 조합 테스트 서비스</title>
   <link rel="stylesheet" href="style.css">
-  <!-- Supabase JS CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div id="app">
     <!-- 헤더 -->
     <header class="header">
-      <h1>🧵 원단 조합 테스트 서비스</h1>
-      <p class="subtitle">Supabase DB 기반 원단 6종 특성 분석 & 조합 호환성 테스트 가이드</p>
+      <h1><button type="button" class="home-link" id="home-link" aria-label="원단 조합 테스트 첫 페이지로 이동">🧵 원단 조합 테스트</button></h1>
+      <p class="subtitle">보유 원단을 선택하고 조합 적합성을 확인하세요</p>
     </header>
 
     <!-- 스텝 인디케이터 -->
-    <div class="step-indicator" id="step-indicator">
-      <div class="step active" data-step="select"><span class="step-num">1</span><span class="step-label">원단 선택</span></div>
+    <nav class="step-indicator" id="step-indicator" aria-label="진행 단계">
+      <button type="button" class="step active" data-step="select" aria-label="원단 선택" aria-current="step"><span class="step-num">1</span><span class="step-label">원단 선택</span></button>
       <div class="step-line"></div>
-      <div class="step" data-step="review"><span class="step-num">2</span><span class="step-label">선택 조회</span></div>
+      <button type="button" class="step" data-step="review" aria-label="선택 조회" disabled><span class="step-num">2</span><span class="step-label">선택 조회</span></button>
       <div class="step-line"></div>
-      <div class="step" data-step="compat"><span class="step-num">3</span><span class="step-label">호환성 결과</span></div>
+      <button type="button" class="step" data-step="compat" aria-label="호환성 결과" disabled><span class="step-num">3</span><span class="step-label">호환성 결과</span></button>
       <div class="step-line"></div>
-      <div class="step" data-step="guide"><span class="step-num">4</span><span class="step-label">테스트 가이드</span></div>
+      <button type="button" class="step" data-step="guide" aria-label="테스트 가이드" disabled><span class="step-num">4</span><span class="step-label">테스트 가이드</span></button>
       <div class="step-line"></div>
-      <div class="step" data-step="action"><span class="step-num">5</span><span class="step-label">조치 추천</span></div>
-    </div>
+      <button type="button" class="step" data-step="action" aria-label="조치 추천" disabled><span class="step-num">5</span><span class="step-label">조치 추천</span></button>
+    </nav>
 
     <!-- ① 원단 선택 -->
     <section id="tab-select" class="tab-panel active">
-      <div class="section-intro">
-        <h2>보유 원단 선택</h2>
-        <p>조합할 원단을 2개 이상 선택하세요. 각 원단의 '상세 정보' 버튼을 누르면 시험 및 물성 스펙을 확인할 수 있습니다.</p>
-      </div>
       <div id="fabric-list" class="fabric-grid"></div>
     </section>
 
@@ -42,10 +37,14 @@
     <section id="tab-review" class="tab-panel">
       <div id="selected-summary" class="selected-summary"></div>
       <div id="selected-fabrics" class="selected-list"></div>
-      <div class="action-bar">
-        <button class="btn btn-ghost" onclick="switchStep('select')">← 원단 다시 선택</button>
-        <button id="btn-test" class="btn btn-primary" disabled>🔬 3단계 호환성 분석 진행</button>
-      </div>
+      <footer class="review-actions">
+        <button class="review-back" onclick="switchStep('select')">← 원단 다시 고르기</button>
+        <div class="review-next">
+          <p id="review-next-hint" aria-live="polite"></p>
+          <button id="btn-test" class="btn btn-primary" disabled>조합 분석하기 <span aria-hidden="true">→</span></button>
+        </div>
+      </footer>
+      <p class="review-footnote">선택한 원단의 DB 프로필을 바탕으로 확인할 사항을 안내합니다. 실제 품질 검증을 대신하지 않습니다.</p>
     </section>
 
     <!-- ③ 호환성 결과 -->
@@ -65,8 +64,8 @@
 
     <!-- 플로팅 바 -->
     <div id="floating-bar" class="floating-bar hidden">
-      <span><strong id="selected-count">0</strong>개 원단 선택됨</span>
-      <button class="btn btn-small" onclick="switchStep('review')">선택 조회 및 분석 →</button>
+      <span id="selected-count">0</span>개 선택됨
+      <button class="btn btn-small" onclick="switchStep('review')">조회 →</button>
     </div>
 
     <!-- 원단 상세 정보 모달 -->
