@@ -280,3 +280,83 @@ body {
   .step-label { display: none; }
   .step-indicator { gap: 0; }
 }
+
+/* === Fabric Card Enhancements & Spec Tags === */
+.fabric-alias { font-size: 12px; color: #86868b; font-weight: 400; }
+.tag-spec { background: #f0f0f5; color: #48484a; }
+.card-footer-actions { margin-top: 12px; padding-top: 10px; border-top: 1px solid #f0f0f5; }
+.btn-detail {
+  width: 100%; padding: 6px 10px; background: #f5f5f7; border: 1px solid #d2d2d7;
+  border-radius: 8px; font-size: 11px; font-weight: 600; color: #1d1d1f;
+  cursor: pointer; transition: background 0.2s;
+}
+.btn-detail:hover { background: #e8e8ed; }
+
+/* === Modal (원단 상세 프로필 및 시험 데이터) === */
+.modal {
+  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 20px;
+}
+.modal.hidden { display: none; }
+.modal-backdrop {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.5); backdrop-filter: blur(4px);
+}
+.modal-card {
+  position: relative; background: #fff; border-radius: 16px;
+  max-width: 650px; width: 100%; max-height: 85vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2); z-index: 1001; overflow: hidden;
+}
+.modal-header {
+  padding: 18px 24px; border-bottom: 1px solid #e5e5ea;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.modal-header h3 { font-size: 18px; font-weight: 700; }
+.modal-header .badge {
+  display: inline-block; font-size: 11px; color: #0071e3; background: #e8f2ff;
+  padding: 3px 8px; border-radius: 6px; margin-top: 4px;
+}
+.btn-close {
+  background: none; border: none; font-size: 20px; cursor: pointer; color: #8e8e93;
+}
+.btn-close:hover { color: #1d1d1f; }
+.modal-body {
+  padding: 20px 24px; overflow-y: auto; font-size: 13px; line-height: 1.6;
+}
+
+/* === Spec Tables & Sections === */
+.spec-section { margin-bottom: 24px; }
+.spec-section h4 { font-size: 14px; font-weight: 700; color: #1d1d1f; margin-bottom: 10px; border-left: 3px solid #0071e3; padding-left: 8px; }
+.spec-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 12px; }
+.spec-table th, .spec-table td { padding: 8px 10px; border-bottom: 1px solid #f2f2f7; text-align: left; }
+.spec-table th { width: 25%; color: #6e6e73; background: #fafafa; font-weight: 600; }
+.spec-table td { color: #1d1d1f; }
+
+.modal-tests-list { display: flex; flex-direction: column; gap: 8px; }
+.test-item-card {
+  background: #f9f9fb; border: 1px solid #e5e5ea; border-radius: 8px; padding: 10px 12px;
+}
+.test-item-name { font-weight: 700; color: #0071e3; margin-bottom: 4px; }
+.test-item-cond { font-size: 12px; color: #6e6e73; }
+.test-item-res { font-size: 12px; color: #1d1d1f; margin-top: 2px; font-weight: 600; }
+
+.sources-list { padding-left: 20px; color: #0071e3; }
+.sources-list li { margin-bottom: 4px; }
+.sources-list a { color: #0071e3; text-decoration: none; }
+.sources-list a:hover { text-decoration: underline; }
+
+/* === 4단계 테스트 가이드 보강 === */
+.guide-title-box { display: flex; align-items: center; gap: 8px; }
+.guide-spec-badge {
+  font-size: 10px; background: #eef4ff; color: #0071e3;
+  padding: 2px 6px; border-radius: 4px; font-weight: 600;
+}
+.guide-method-text { white-space: pre-line; margin-top: 4px; }
+.input-with-unit { display: flex; align-items: center; gap: 6px; flex: 1; }
+.guide-submit-bar {
+  background: #fff; border-radius: 14px; padding: 20px; margin-top: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04); text-align: center;
+}
+.guide-progress-info { font-size: 14px; font-weight: 600; color: #1d1d1f; margin-bottom: 14px; }
