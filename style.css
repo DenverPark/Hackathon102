@@ -610,3 +610,9 @@ html { scroll-padding-bottom: 100px; }
 #tab-guide .guide-gate-hint { font-size: 12px; }
 #tab-guide [data-guide-steps][hidden] { display: none; }
 @media (max-width: 600px) { #tab-guide .guide-compare-grid { grid-template-columns: 1fr; } }
+#tab-guide .guide-result-input { display: grid; gap: 7px; margin: 16px 0; }
+#tab-guide .guide-result-input label { display: grid; gap: 6px; font-size: 13px; font-weight: 700; }
+#tab-guide .guide-result-control { display: block; }
+#tab-guide .guide-result-input input, #tab-guide .guide-result-input select, #tab-guide .guide-result-input textarea { width: 100%; border: 1px solid #cbd5e1; border-radius: 9px; background: #fff; padding: 10px 12px; font: inherit; font-size: 14px; }
+#tab-guide .guide-result-input textarea { resize: vertical; }
+#tab-guide .guide-result-input small, #tab-guide .guide-result-input label span { color: #66778b; font-weight: 400; line-height: 1.55; }
