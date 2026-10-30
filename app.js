@@ -428,130 +428,32 @@ function renderHandoff(step) {
   }
 
 
-  // 4단계 테스트 가이드
-  target.innerHTML = `
-    <div class="guide-intro">
-      <h2>🧪 4단계: 물리·화학 테스트 가이드</h2>
-      <p>선택한 <strong>${escape(names.join(' · '))}</strong>의 조합 시편 테스트 절차입니다.</p>
-      <p>ISO 및 KS 표준 규격에 맞추어 시험을 진행하고 결과를 아래 폼에 입력해 주세요.</p>
-    </div>
+  renderEvidenceGuide(target);
 
-    <!-- 세탁 안정성 가이드 -->
-    <article class="guide-card">
-      <div class="guide-header">
-        <span class="guide-icon">🌊</span>
-        <h3 class="guide-title">1. 세탁 안정성 테스트</h3>
-      </div>
-      <p class="guide-desc">두 원단을 접합 봉제한 조합 시편을 세탁한 후 접합부 외관과 변형을 관찰합니다.</p>
-      <div class="guide-method">
-        <strong>진행 순서 (ISO 6330 표준)</strong>
-        <ol>
-          <li>각 원단의 관리 라벨과 가공 이력을 확인합니다.</li>
-          <li>실제 의류 제작에 사용할 봉제 방식으로 30×30cm 조합 시편을 제작하고 측정 지점을 표시합니다.</li>
-          <li>공통 세탁 조건(30~40℃, 중성세제)으로 표준 코스 세탁 및 건조를 진행합니다.</li>
-          <li>완전히 건조한 뒤 접합부 뒤틀림, 주름, 올풀림, 이염 여부를 전후 사진과 대조합니다.</li>
-        </ol>
-      </div>
-      <p class="wash-note">⚠️ 세탁 중 이염 위험이 있으므로 본제품이나 타 의류와 함께 세탁하지 마세요.</p>
-    </article>
+}
 
-    <!-- 수축률 비교 가이드 -->
-    <article class="guide-card">
-      <div class="guide-header">
-        <span class="guide-icon">📏</span>
-        <h3 class="guide-title">2. 수축률 비교 (ISO 5077:2007)</h3>
-      </div>
-      <div class="guide-method">
-        <ol>
-          <li>경사(세로)와 위사(가로) 방향으로 25cm 기준점을 표시합니다.</li>
-          <li>세탁 및 건조 완료 후 기준점 간 거리를 재측정합니다.</li>
-          <li>수축률 = (세탁 전 길이 − 세탁 후 길이) ÷ 세탁 전 길이 × 100 (%)</li>
-        </ol>
-      </div>
-    </article>
-
-    <!-- 이염 확인 가이드 -->
-    <article class="guide-card">
-      <div class="guide-header">
-        <span class="guide-icon">🎨</span>
-        <h3 class="guide-title">3. 이염 및 견뢰도 확인 (ISO 105-C06)</h3>
-      </div>
-      <div class="guide-method">
-        <ol>
-          <li>유색 원단과 백색 첨부포(면, 나일론 등)를 접촉 봉합합니다.</li>
-          <li>40℃ 시험액에서 세탁 후 오염용 회색색표(Gray Scale)를 통해 1~5등급으로 판정합니다.</li>
-        </ol>
-      </div>
-    </article>
-
-    <!-- 결과 입력 폼 -->
-    <article class="guide-card">
-      <div class="guide-header">
-        <span class="guide-icon">📝</span>
-        <h3 class="guide-title">4. 세탁 안정성 결과 입력</h3>
-      </div>
-      <p class="guide-desc">실험 후 관찰된 등급과 조건을 입력하면 5단계 맞춤 생산 조치를 추천해 드립니다.</p>
-      <form id="wash-form" class="wash-form">
-        <label>
-          시험한 원단 조합
-          <select name="pair" required>
-            <option value="">원단 조합 선택</option>
-            ${analysis.pairs.map(p => {
-              const label = `${p.nameA} + ${p.nameB}`;
-              return `<option value="${escape(label)}" ${washResult.pair === label ? 'selected' : ''}>${escape(label)}</option>`;
-            }).join('')}
-          </select>
-        </label>
-        <label>
-          접합부 외관 변화 관찰 등급
-          <select name="grade" required>
-            <option value="">관찰 결과 선택</option>
-            ${[
-              ['5', '5등급 — 변화 없음 (최우수)'],
-              ['4', '4등급 — 약간의 미세 변화 (양호)'],
-              ['3', '3등급 — 눈에 띄는 주름/변화 (주의)'],
-              ['2', '2등급 — 큰 뒤틀림 및 수축 차이 (위험)'],
-              ['1', '1등급 — 접합부 분리 또는 원단 파손 (사용불가)']
-            ].map(([v, label]) => `<option value="${v}" ${washResult.grade === v ? 'selected' : ''}>${label}</option>`).join('')}
-          </select>
-        </label>
-        <label>
-          세탁 횟수
-          <input name="cycles" type="number" min="1" max="100" step="1" placeholder="예: 5" value="${escape(washResult.cycles || '')}">
-        </label>
-        <label>
-          세탁 온도 (℃)
-          <input name="temperature" type="number" min="0" max="100" step="1" placeholder="예: 30" value="${escape(washResult.temperature || '')}">
-        </label>
-        <label>
-          세탁·건조 방식 및 특이사항
-          <textarea name="notes" rows="3" maxlength="1000" placeholder="사용 세제, 자연건조/드럼건조 여부, 관찰된 특이사항을 기록하세요">${escape(washResult.notes || '')}</textarea>
-        </label>
-        <button type="submit" class="btn btn-primary">입력 결과 반영</button>
-        <p id="wash-status" role="status" aria-live="polite">${washResult.confirmed ? '✅ 입력하신 시험 결과가 정상 반영되었습니다.' : ''}</p>
-      </form>
-    </article>
-
-    <div class="review-actions compat-actions" style="margin-top:20px;">
-      <button class="review-back" onclick="switchStep('compat')">← 호환성 결과</button>
-      <button class="btn btn-primary" onclick="goToStepAction()">5단계 맞춤 조치 추천 <span aria-hidden="true">→</span></button>
-    </div>`;
-
-  const form = target.querySelector('#wash-form');
-  form.addEventListener('input', () => {
-    washResult = { ...washResult, ...Object.fromEntries(new FormData(form)), confirmed: false };
-    target.querySelector('#wash-status').textContent = '';
-  });
-  form.addEventListener('change', () => {
-    washResult = { ...washResult, ...Object.fromEntries(new FormData(form)), confirmed: false };
-    target.querySelector('#wash-status').textContent = '';
-  });
-  form.addEventListener('submit', e => {
-    e.preventDefault();
-    if (!form.reportValidity()) return;
-    washResult = { ...Object.fromEntries(new FormData(form)), confirmed: true };
-    target.querySelector('#wash-status').textContent = '✅ 입력하신 시험 결과가 정상 반영되었습니다.';
-  });
+const guideConditionLabels={wash_temp_c:'세탁 온도 (℃)',wash_minutes:'세탁 시간 (분)',cycles:'세탁 횟수',detergent:'세제',drying:'건조 방식',drying_alternatives:'기록된 건조 방식',standards_reported:'기록된 시험 기준',environment:'측정 환경',points:'측정 지점 수',wash_conditions:'시험 조건',wash_temp_c_conflicting:'서로 다른 온도 기록 (℃)',verification_status:'자료 확인 상태',pages:'자료 페이지'};
+function guideValue(value){if(value===null||value===undefined)return '미기재';if(Array.isArray(value))return value.map(guideValue).join(' / ');if(typeof value==='object')return Object.entries(value).map(([k,v])=>`${k}: ${guideValue(v)}`).join(', ');return String(value);}
+function guideRecord(record,sources){
+  const source=sources.find(item=>item.id===record.source_id);
+  let url='';try{const u=new URL(source?.url);if(u.protocol==='https:'||u.protocol==='http:')url=u.href;}catch{}
+  const rows=Object.entries(record.conditions||{}).map(([key,value])=>`<li><strong>${escape(guideConditionLabels[key]||key)}:</strong> ${escape(guideValue(value))}</li>`).join('');
+  return `<div class="guide-record"><p><strong>연구 시료:</strong> ${escape(record.sample_description||'미기재')}</p><p><strong>자료의 한계:</strong> ${escape(record.applicability||'확인 필요')}</p><details><summary>기록된 연구 조건과 출처 보기</summary><ul>${rows||'<li>시험 조건 미기재</li>'}</ul><p>${url?`<a href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(source.title)}</a>`:escape(source?.title||'출처 확인 필요')}</p><p>${escape(source?.limitations||'')}</p></details></div>`;
+}
+async function renderEvidenceGuide(target){
+  const snapshot=analysis;const ids=snapshot.fabrics.map(f=>f.id);
+  target.innerHTML='<div class="guide-intro"><h2>🧪 조합별 테스트 확인</h2><p role="status">원단별 연구 DB를 확인하고 있어요...</p></div>';
+  try{
+    const {byId,sources}=await GuideEvidence.getSelected(ids);
+    if(snapshot!==analysis||currentStep!=='guide')return;
+    const name=id=>snapshot.fabrics.find(f=>f.id===id)?.name||String(id);
+    const pairs=snapshot.pairs.map(pair=>{
+      const pairIds=[pair.fabric_a_id,pair.fabric_b_id];const items=GuideEvidence.recommendations(pairIds,byId);
+      return `<section class="guide-pair"><h3>확인할 원단 조합은 ${pairIds.map(id=>escape(name(id))).join(' + ')}</h3><p class="guide-pair-desc">선택한 원단의 DB 기록이 있는 항목을 확인 후보로 보여드려요.</p>${items.length?items.map((item,index)=>`<article class="guide-card"><div class="guide-header"><span class="guide-icon" aria-hidden="true">🔬</span><h4 class="guide-title">${index+1}. ${escape(item.label)} 확인</h4></div><p class="guide-desc">${item.perFabric.every(rows=>rows.length)?'두 원단 모두에 관련 연구 기록이 있어요.':'한 원단에 관련 연구 기록이 있어요. 다른 원단은 기록을 찾지 못했어요.'}</p>${pairIds.map((id,i)=>`<div class="guide-method"><strong>${escape(name(id))}</strong>${item.perFabric[i].length?item.perFabric[i].map(record=>guideRecord(record,sources)).join(''):'<p>이 항목의 DB 기록이 없어요.</p>'}</div>`).join('')}<p class="guide-caution">기록은 연구 시료의 조건입니다. 실제 원단에 그대로 적용하거나, 다른 조건의 수치를 직접 비교하지 마세요. 실제 시험법과 공통 관리 조건은 제조사 또는 시험기관에 확인하세요.</p></article>`).join(''):'<div class="guide-card"><p>연결된 연구 DB에서 확인할 시험 기록을 찾지 못했습니다.</p></div>'}</section>`;
+    }).join('');
+    target.innerHTML=`<div class="guide-intro"><h2>🧪 원단 조합별 테스트 확인</h2><p>원단별 연구 DB에 기록된 시험 항목을 조합별 확인 후보로 보여드려요.</p><p>실제 조합을 검증한 결과나 공인 합격 판정이 아닙니다. 출처가 미확인되거나 연구 시료가 다른 기록도 있으니 한계를 확인하세요.</p></div>${pairs}<div class="action-bar"><button type="button" class="btn btn-ghost" data-guide-back>← 호환성 결과</button></div>`;
+    target.querySelector('[data-guide-back]').addEventListener('click',()=>switchStep('compat'));
+  }catch(error){if(snapshot!==analysis||currentStep!=='guide')return;target.innerHTML=`<div class="guide-intro" role="alert"><h2>시험 자료를 불러오지 못했어요</h2><p>${escape(error.message)}. 임의의 테스트를 대신 표시하지 않습니다.</p><button class="btn btn-primary" data-guide-retry>다시 시도</button> <button class="btn btn-ghost" data-guide-back>← 호환성 결과</button></div>`;target.querySelector('[data-guide-retry]').addEventListener('click',()=>renderEvidenceGuide(target));target.querySelector('[data-guide-back]').addEventListener('click',()=>switchStep('compat'));}
 }
 
 // ============================================================
