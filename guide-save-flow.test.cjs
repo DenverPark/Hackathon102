@@ -1,6 +1,6 @@
 const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
 const G=require('./guide-evidence.js'),protocols=require('./guide-protocols.js'),Store=require('./test-records.js');
-const src=fs.readFileSync('app.js','utf8'),code=src.slice(src.indexOf('const guideResultLabels='),src.indexOf('// 5페이지는 main'));
+const src=fs.readFileSync('app.js','utf8'),code=src.slice(src.indexOf('const guideResultLabels='),src.indexOf('// 현재 선택한 조합'));
 let saved=null,blocked=false;const storage={getItem:()=>saved,setItem:(_k,v)=>{if(blocked)throw Error('차단됨');saved=v}};
 const handlers={},status={textContent:''},history={innerHTML:'',querySelectorAll:()=>[]};
 const card={dataset:{pairIndex:'0',property:'shrinkage'},querySelector:()=>status};
