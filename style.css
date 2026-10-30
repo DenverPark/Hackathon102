@@ -590,3 +590,23 @@ html { scroll-padding-bottom: 100px; }
 #tab-guide .guide-record { border: 0; padding: 0; }
 #tab-guide .guide-intro p { line-height: 1.7; }
 @media (max-width: 520px) { #tab-guide .guide-pair > summary { padding: 14px; } #tab-guide .guide-card { padding: 16px; } }
+#tab-guide .guide-why, #tab-guide .guide-comparison, #tab-guide .guide-gate { border-radius: 10px; padding: 14px; margin: 12px 0; font-size: 13px; line-height: 1.7; }
+#tab-guide .guide-why { background: #eef6ff; color: #28445f; }
+#tab-guide .guide-why p, #tab-guide .guide-comparison p, #tab-guide .guide-gate p { margin: 6px 0; }
+#tab-guide .guide-comparison { border: 1px solid #e1e7ef; }
+#tab-guide .guide-comparison > h5 { font-size: 14px; }
+#tab-guide .guide-compare-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin: 12px 0; }
+#tab-guide .guide-compare-fabric { background: #f6f8fa; border-radius: 8px; padding: 10px; min-width: 0; overflow-wrap: anywhere; }
+#tab-guide .guide-compare-fabric h5 { font-size: 14px; }
+#tab-guide .guide-study + .guide-study { border-top: 1px solid #dce3eb; margin-top: 12px; padding-top: 10px; }
+#tab-guide .guide-study dl { margin: 8px 0; }
+#tab-guide .guide-study dl div { display: grid; grid-template-columns: 75px 1fr; gap: 8px; }
+#tab-guide .guide-study dt { font-weight: 600; }
+#tab-guide .guide-study dd { margin: 0; }
+#tab-guide .guide-compare-result { color: #6f5734; }
+#tab-guide .guide-gate { background: #fff8e9; color: #624e2b; }
+#tab-guide .guide-gate label { display: flex; gap: 8px; align-items: flex-start; font-weight: 600; margin-top: 10px; }
+#tab-guide .guide-gate input { margin-top: 5px; flex: none; }
+#tab-guide .guide-gate-hint { font-size: 12px; }
+#tab-guide [data-guide-steps][hidden] { display: none; }
+@media (max-width: 600px) { #tab-guide .guide-compare-grid { grid-template-columns: 1fr; } }

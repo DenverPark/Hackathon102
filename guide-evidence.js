@@ -10,7 +10,7 @@ const GuideEvidence = (() => {
     return {byId:Object.fromEntries(ids.map((id,i)=>[id,records[i]])),sources};
   }
   function recommendations(pair,byId){
-    return Object.entries(labels).map(([property,label])=>({property,label,perFabric:pair.map(id=>(byId[id]||[]).filter(r=>r.property===property))})).filter(item=>item.perFabric.some(list=>list.length));
+    return Object.entries(labels).map(([property,label])=>({property,label,perFabric:pair.map(id=>(byId[id]||[]).filter(r=>r.property===property || (property==='shrinkage' && r.property==='felting_shrinkage')))})).filter(item=>item.perFabric.some(list=>list.length));
   }
   return {getSelected,recommendations};
 })();
