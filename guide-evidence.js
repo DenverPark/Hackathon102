@@ -1,7 +1,7 @@
 const GuideEvidence = (() => {
   const config = {url:'https://czxcnvgbrrakyydtdhgh.supabase.co',key:'sb_publishable_1W4lthi1bYNvDKALAtpaBQ_fGJSj3EY'};
   const materialIds={1:'nylon100',2:'wool100',3:'denim-cotton100',4:'cotton65-poly35',5:'cotton100',6:'polyester100'};
-  // 집에서 참고 관찰할 수 있는 항목만 노출합니다. DB 기록은 후보 선정에만 사용합니다.
+  // 세탁 관련 DB 기록을 분류합니다. 가정용 적합 여부는 DB에서 확인할 수 없습니다.
   const labels={staining:'이염',shrinkage:'세탁 후 길이 변화',color_change:'색상 변화'};
   async function query(path){const response=await fetch(config.url+'/rest/v1/'+path,{headers:{apikey:config.key}});if(!response.ok)throw new Error('연구 DB 조회 실패 ('+response.status+')');return response.json();}
   async function getSelected(ids){
