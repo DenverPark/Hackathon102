@@ -423,7 +423,7 @@ function renderHandoff(step) {
   const names = analysis.fabrics.map(f => f.name);
 
   if (step === 'action') {
-    renderActionPending(target);
+    submitTests();
     return;
   }
 
@@ -457,13 +457,88 @@ async function renderEvidenceGuide(target){
   }catch(error){if(snapshot!==analysis||currentStep!=='guide')return;target.innerHTML=`<div class="guide-intro" role="alert"><h2>시험 자료를 불러오지 못했어요</h2><p>${escape(error.message)}. 임의의 테스트를 대신 표시하지 않습니다.</p><button class="btn btn-primary" data-guide-retry>다시 시도</button> <button class="btn btn-ghost" data-guide-back>← 호환성 결과</button> <button class="btn btn-primary" data-guide-next>5단계 조치 확인 →</button></div>`;target.querySelector('[data-guide-retry]').addEventListener('click',()=>renderEvidenceGuide(target));target.querySelector('[data-guide-back]').addEventListener('click',()=>switchStep('compat'));target.querySelector('[data-guide-next]').addEventListener('click',()=>switchStep('action'));}
 }
 
-// 실제 시험 결과 연결 전에는 생산 판정이나 조치를 임의로 생성하지 않습니다.
-function renderActionPending(target){
-  const pairNames=analysis.pairs.map(pair=>`${escape(pair.nameA)} + ${escape(pair.nameB)}`);
-  target.innerHTML=`<div class="action-header"><h2>📋 5단계: 조치 확인</h2><p>선택한 원단 조합을 확인해 주세요.</p></div><article class="guide-card"><div class="guide-header"><span class="guide-icon" aria-hidden="true">🧵</span><h3 class="guide-title">선택한 원단 조합</h3></div><p class="guide-desc">${pairNames.join('<br>')}</p></article><article class="guide-card"><div class="guide-header"><span class="guide-icon" aria-hidden="true">🔎</span><h3 class="guide-title">시험 결과 확인 필요</h3></div><p class="guide-desc">4단계에는 연구자료를 바탕으로 한 확인 후보가 표시됩니다. 실제 원단의 시험 결과와 이를 평가할 기준은 아직 연결되지 않아 맞춤 조치와 생산 가능 여부를 판정할 수 없습니다.</p><div class="guide-method"><strong>다음 확인 사항</strong><ol><li>4단계에서 원단별 연구 기록과 출처·한계를 확인하세요.</li><li>실제 원단의 관리 표시와 가공 상태를 확인하고, 필요한 시험 방법을 제조사 또는 시험기관과 상의하세요.</li><li>실제 조합 시편의 시험 결과와 제품 용도에 맞는 평가 기준이 준비되면 결과를 확인하세요.</li></ol></div><p class="guide-caution">현재 페이지는 실제 시험 결과를 저장하거나 생산 가능 여부를 판단하지 않습니다.</p></article><div class="action-bar"><button type="button" class="btn btn-ghost" data-action-back>← 테스트 가이드</button><button type="button" class="btn btn-secondary" data-action-restart>처음부터</button></div>`;
-  target.querySelector('[data-action-back]').addEventListener('click',()=>switchStep('guide'));
-  target.querySelector('[data-action-restart]').addEventListener('click',restartAll);
+// 5페이지는 main 브랜치의 조치 카드와 규칙을 사용합니다.
+// 4페이지 연구자료는 시험 결과가 아니므로 값이 없을 때는 판정을 보류합니다.
+async function submitTests(results=[]){
+  const target=$('#action-content');
+  if(!Array.isArray(results)||results.length===0){renderActionPending(target);return;}
+  const sessionId=`session_${Date.now()}`;
+  await MainActions.saveTestResults(sessionId,results);
+  const actions=await MainActions.getActionRecommendations(results);
+  if(!actions.length){renderActionPending(target);return;}
+  renderActions(actions);
 }
+window.submitTests=submitTests;
+function renderActionPending(target){
+  target.innerHTML=`<div class="final-verdict"><div class="verdict-icon">📋</div><div class="verdict-title">시험 결과 연결 대기</div><div class="verdict-desc">main 브랜치의 조치 추천 화면입니다. 현재 4페이지에서는 연구자료만 확인할 수 있어 실제 시험 결과가 전달되지 않습니다.</div></div><div class="action-bar" style="margin-top:24px;"><button class="btn btn-ghost" onclick="switchStep('guide')">← 테스트 수정</button><button class="btn btn-secondary" onclick="restartAll()">🔄 처음부터</button></div>`;
+}
+function renderActions(actions) {
+  let h = '';
+
+  // 요약 카운트
+  const successCount = actions.filter(a => a.level === 'success').length;
+  const warningCount = actions.filter(a => a.level === 'warning').length;
+  const dangerCount  = actions.filter(a => a.level === 'danger').length;
+
+  // 최종 판정
+  let verdictIcon, verdictTitle, verdictDesc;
+  if (dangerCount === 0 && warningCount === 0) {
+    verdictIcon  = '🎉';
+    verdictTitle = '모든 테스트 통과!';
+    verdictDesc  = '선택하신 원단 조합은 모든 테스트 항목에서 양호한 결과를 보였습니다. 생산 진행이 가능합니다.';
+  } else if (dangerCount === 0) {
+    verdictIcon  = '⚠️';
+    verdictTitle = '조건부 생산 가능';
+    verdictDesc  = '일부 항목에서 주의가 필요합니다. 아래 권장 조치를 적용한 후 생산을 진행하세요.';
+  } else {
+    verdictIcon  = '🚫';
+    verdictTitle = '생산 전 조치 필수';
+    verdictDesc  = '중요한 문제가 발견되었습니다. 아래 필수 조치 사항을 반드시 이행한 후 재테스트하세요.';
+  }
+
+  h += `
+    <div class="final-verdict">
+      <div class="verdict-icon">${verdictIcon}</div>
+      <div class="verdict-title">${verdictTitle}</div>
+      <div class="verdict-desc">${verdictDesc}</div>
+    </div>`;
+
+  // 요약 칩
+  h += `<div class="action-summary-bar">`;
+  if (successCount) h += `<span class="action-summary-chip success">✅ 양호 ${successCount}</span>`;
+  if (warningCount) h += `<span class="action-summary-chip warning">⚠️ 주의 ${warningCount}</span>`;
+  if (dangerCount)  h += `<span class="action-summary-chip danger">🚫 위험 ${dangerCount}</span>`;
+  h += `</div>`;
+
+  // 위험 → 주의 → 양호 순 정렬
+  const order = { danger: 0, warning: 1, success: 2 };
+  const sorted = [...actions].sort((a, b) => (order[a.level] ?? 9) - (order[b.level] ?? 9));
+
+  // 조치 카드
+  sorted.forEach(a => {
+    h += `
+      <div class="rec-card rec-${a.level}">
+        <div class="rec-icon">${a.icon}</div>
+        <div class="rec-body">
+          <div class="rec-test-name">${a.testName}</div>
+          <div class="rec-title">${a.title}</div>
+          <div class="rec-desc">${a.desc}</div>
+          <div class="rec-input-val">측정값: ${a.inputValue} ${a.inputUnit}</div>
+        </div>
+      </div>`;
+  });
+
+  // 하단 액션
+  h += `
+    <div class="action-bar" style="margin-top:24px;">
+      <button class="btn btn-ghost" onclick="switchStep('guide')">← 테스트 수정</button>
+      <button class="btn btn-secondary" onclick="restartAll()">🔄 처음부터</button>
+    </div>`;
+
+  $('#action-content').innerHTML = h;
+}
+
+
 
 function restartAll() {
   selected.clear();
