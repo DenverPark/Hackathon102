@@ -423,7 +423,7 @@ function renderHandoff(step) {
   const names = analysis.fabrics.map(f => f.name);
 
   if (step === 'action') {
-    submitTests();
+    renderActionPending(target);
     return;
   }
 
@@ -451,117 +451,18 @@ async function renderEvidenceGuide(target){
       const pairIds=[pair.fabric_a_id,pair.fabric_b_id];const items=GuideEvidence.recommendations(pairIds,byId);
       return `<section class="guide-pair"><h3>확인할 원단 조합은 ${pairIds.map(id=>escape(name(id))).join(' + ')}</h3><p class="guide-pair-desc">선택한 원단의 DB 기록이 있는 항목을 확인 후보로 보여드려요.</p>${items.length?items.map((item,index)=>`<article class="guide-card"><div class="guide-header"><span class="guide-icon" aria-hidden="true">🔬</span><h4 class="guide-title">${index+1}. ${escape(item.label)} 확인</h4></div><p class="guide-desc">${item.perFabric.every(rows=>rows.length)?'두 원단 모두에 관련 연구 기록이 있어요.':'한 원단에 관련 연구 기록이 있어요. 다른 원단은 기록을 찾지 못했어요.'}</p>${pairIds.map((id,i)=>`<div class="guide-method"><strong>${escape(name(id))}</strong>${item.perFabric[i].length?item.perFabric[i].map(record=>guideRecord(record,sources)).join(''):'<p>이 항목의 DB 기록이 없어요.</p>'}</div>`).join('')}<p class="guide-caution">기록은 연구 시료의 조건입니다. 실제 원단에 그대로 적용하거나, 다른 조건의 수치를 직접 비교하지 마세요. 실제 시험법과 공통 관리 조건은 제조사 또는 시험기관에 확인하세요.</p></article>`).join(''):'<div class="guide-card"><p>연결된 연구 DB에서 확인할 시험 기록을 찾지 못했습니다.</p></div>'}</section>`;
     }).join('');
-    target.innerHTML=`<div class="guide-intro"><h2>🧪 원단 조합별 테스트 확인</h2><p>원단별 연구 DB에 기록된 시험 항목을 조합별 확인 후보로 보여드려요.</p><p>실제 조합을 검증한 결과나 공인 합격 판정이 아닙니다. 출처가 미확인되거나 연구 시료가 다른 기록도 있으니 한계를 확인하세요.</p></div>${pairs}<div class="action-bar"><button type="button" class="btn btn-ghost" data-guide-back>← 호환성 결과</button></div>`;
+    target.innerHTML=`<div class="guide-intro"><h2>🧪 원단 조합별 테스트 확인</h2><p>원단별 연구 DB에 기록된 시험 항목을 조합별 확인 후보로 보여드려요.</p><p>실제 조합을 검증한 결과나 공인 합격 판정이 아닙니다. 출처가 미확인되거나 연구 시료가 다른 기록도 있으니 한계를 확인하세요.</p></div>${pairs}<div class="action-bar"><button type="button" class="btn btn-ghost" data-guide-back>← 호환성 결과</button><button type="button" class="btn btn-primary" data-guide-next>5단계 조치 확인 →</button></div>`;
     target.querySelector('[data-guide-back]').addEventListener('click',()=>switchStep('compat'));
-  }catch(error){if(snapshot!==analysis||currentStep!=='guide')return;target.innerHTML=`<div class="guide-intro" role="alert"><h2>시험 자료를 불러오지 못했어요</h2><p>${escape(error.message)}. 임의의 테스트를 대신 표시하지 않습니다.</p><button class="btn btn-primary" data-guide-retry>다시 시도</button> <button class="btn btn-ghost" data-guide-back>← 호환성 결과</button></div>`;target.querySelector('[data-guide-retry]').addEventListener('click',()=>renderEvidenceGuide(target));target.querySelector('[data-guide-back]').addEventListener('click',()=>switchStep('compat'));}
+    target.querySelector('[data-guide-next]').addEventListener('click',()=>switchStep('action'));
+  }catch(error){if(snapshot!==analysis||currentStep!=='guide')return;target.innerHTML=`<div class="guide-intro" role="alert"><h2>시험 자료를 불러오지 못했어요</h2><p>${escape(error.message)}. 임의의 테스트를 대신 표시하지 않습니다.</p><button class="btn btn-primary" data-guide-retry>다시 시도</button> <button class="btn btn-ghost" data-guide-back>← 호환성 결과</button> <button class="btn btn-primary" data-guide-next>5단계 조치 확인 →</button></div>`;target.querySelector('[data-guide-retry]').addEventListener('click',()=>renderEvidenceGuide(target));target.querySelector('[data-guide-back]').addEventListener('click',()=>switchStep('compat'));target.querySelector('[data-guide-next]').addEventListener('click',()=>switchStep('action'));}
 }
 
-// ============================================================
-//  ⑤ 테스트 결과 제출 → 조치 추천 (main 브랜치 100% 동일 구현)
-// ============================================================
-async function submitTests() {
-  $('#action-content').innerHTML = `
-    <div class="loading-state">
-      <div class="spinner"></div>
-      <p>테스트 결과를 분석하고 조치를 생성 중...</p>
-    </div>`;
-
-  // 입력값 정리 (testGuides 또는 washResult)
-  const results = [];
-  if (testGuides && testGuides.length > 0) {
-    testGuides.forEach(g => {
-      if (testInputs[g.id] !== undefined && testInputs[g.id] !== '') {
-        results.push({ testId: g.id, value: testInputs[g.id] });
-      }
-    });
-  }
-
-  // 기본 측정값 폴백 (main 브랜치 룰 기반)
-  if (results.length === 0) {
-    const pairs = analysis ? analysis.pairs : [];
-    const hasCaution = pairs.some(p => p.level !== 'good');
-    const washGrade = washResult?.grade ? Number(washResult.grade) : 4;
-
-    results.push({ testId: 'shrinkage', value: hasCaution ? 3.5 : 1.5 });
-    results.push({ testId: 'pilling', value: washGrade });
-    results.push({ testId: 'colorfastness', value: hasCaution ? 3 : 5 });
-    results.push({ testId: 'tensile', value: hasCaution ? 180 : 250 });
-  }
-
-  // API: 결과 저장
-  const sessionId = `session_${Date.now()}`;
-  await API.saveTestResults(sessionId, results);
-
-  // API: 조치 추천 조회
-  const actions = await API.getActionRecommendations(results);
-
-  renderActions(actions);
-}
-
-function renderActions(actions) {
-  let h = '';
-
-  // 요약 카운트
-  const successCount = actions.filter(a => a.level === 'success').length;
-  const warningCount = actions.filter(a => a.level === 'warning').length;
-  const dangerCount  = actions.filter(a => a.level === 'danger').length;
-
-  // 최종 판정
-  let verdictIcon, verdictTitle, verdictDesc;
-  if (dangerCount === 0 && warningCount === 0) {
-    verdictIcon  = '🎉';
-    verdictTitle = '모든 테스트 통과!';
-    verdictDesc  = '선택하신 원단 조합은 모든 테스트 항목에서 양호한 결과를 보였습니다. 생산 진행이 가능합니다.';
-  } else if (dangerCount === 0) {
-    verdictIcon  = '⚠️';
-    verdictTitle = '조건부 생산 가능';
-    verdictDesc  = '일부 항목에서 주의가 필요합니다. 아래 권장 조치를 적용한 후 생산을 진행하세요.';
-  } else {
-    verdictIcon  = '🚫';
-    verdictTitle = '생산 전 조치 필수';
-    verdictDesc  = '중요한 문제가 발견되었습니다. 아래 필수 조치 사항을 반드시 이행한 후 재테스트하세요.';
-  }
-
-  h += `
-    <div class="final-verdict">
-      <div class="verdict-icon">${verdictIcon}</div>
-      <div class="verdict-title">${verdictTitle}</div>
-      <div class="verdict-desc">${verdictDesc}</div>
-    </div>`;
-
-  // 요약 칩
-  h += `<div class="action-summary-bar">`;
-  if (successCount) h += `<span class="action-summary-chip success">✅ 양호 ${successCount}</span>`;
-  if (warningCount) h += `<span class="action-summary-chip warning">⚠️ 주의 ${warningCount}</span>`;
-  if (dangerCount)  h += `<span class="action-summary-chip danger">🚫 위험 ${dangerCount}</span>`;
-  h += `</div>`;
-
-  // 위험 → 주의 → 양호 순 정렬
-  const order = { danger: 0, warning: 1, success: 2 };
-  const sorted = [...actions].sort((a, b) => (order[a.level] ?? 9) - (order[b.level] ?? 9));
-
-  // 조치 카드
-  sorted.forEach(a => {
-    h += `
-      <div class="rec-card rec-${a.level}">
-        <div class="rec-icon">${a.icon}</div>
-        <div class="rec-body">
-          <div class="rec-test-name">${a.testName}</div>
-          <div class="rec-title">${a.title}</div>
-          <div class="rec-desc">${a.desc}</div>
-          <div class="rec-input-val">측정값: ${a.inputValue} ${a.inputUnit}</div>
-        </div>
-      </div>`;
-  });
-
-  // 하단 액션
-  h += `
-    <div class="action-bar" style="margin-top:24px;">
-      <button class="btn btn-ghost" onclick="switchStep('guide')">← 테스트 수정</button>
-      <button class="btn btn-secondary" onclick="restartAll()">🔄 처음부터</button>
-    </div>`;
-
-  $('#action-content').innerHTML = h;
+// 실제 시험 결과 연결 전에는 생산 판정이나 조치를 임의로 생성하지 않습니다.
+function renderActionPending(target){
+  const pairNames=analysis.pairs.map(pair=>`${escape(pair.nameA)} + ${escape(pair.nameB)}`);
+  target.innerHTML=`<div class="action-header"><h2>📋 5단계: 조치 확인</h2><p>선택한 원단 조합을 확인해 주세요.</p></div><article class="guide-card"><div class="guide-header"><span class="guide-icon" aria-hidden="true">🧵</span><h3 class="guide-title">선택한 원단 조합</h3></div><p class="guide-desc">${pairNames.join('<br>')}</p></article><article class="guide-card"><div class="guide-header"><span class="guide-icon" aria-hidden="true">🔎</span><h3 class="guide-title">시험 결과 확인 필요</h3></div><p class="guide-desc">4단계에는 연구자료를 바탕으로 한 확인 후보가 표시됩니다. 실제 원단의 시험 결과와 이를 평가할 기준은 아직 연결되지 않아 맞춤 조치와 생산 가능 여부를 판정할 수 없습니다.</p><div class="guide-method"><strong>다음 확인 사항</strong><ol><li>4단계에서 원단별 연구 기록과 출처·한계를 확인하세요.</li><li>실제 원단의 관리 표시와 가공 상태를 확인하고, 필요한 시험 방법을 제조사 또는 시험기관과 상의하세요.</li><li>실제 조합 시편의 시험 결과와 제품 용도에 맞는 평가 기준이 준비되면 결과를 확인하세요.</li></ol></div><p class="guide-caution">현재 페이지는 실제 시험 결과를 저장하거나 생산 가능 여부를 판단하지 않습니다.</p></article><div class="action-bar"><button type="button" class="btn btn-ghost" data-action-back>← 테스트 가이드</button><button type="button" class="btn btn-secondary" data-action-restart>처음부터</button></div>`;
+  target.querySelector('[data-action-back]').addEventListener('click',()=>switchStep('guide'));
+  target.querySelector('[data-action-restart]').addEventListener('click',restartAll);
 }
 
 function restartAll() {
@@ -572,8 +473,6 @@ function restartAll() {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 window.restartAll = restartAll;
-window.submitTests = submitTests;
-window.goToStepAction = submitTests;
 
 
 
