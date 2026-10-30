@@ -625,3 +625,9 @@ html { scroll-padding-bottom: 100px; }
 #tab-guide .guide-save { justify-self: start; }
 #tab-guide [data-save-status] { font-size: 12px; color: #245e4c; min-height: 1.5em; }
 #tab-guide .history-record [data-record-delete] { flex-shrink: 0; white-space: nowrap; padding: 8px 12px; }
+#tab-guide .guide-protocol-conditions { margin: 8px 0; }
+#tab-guide .guide-protocol-conditions > div { display: grid; grid-template-columns: 105px minmax(0,1fr); gap: 10px; padding: 9px 0; border-bottom: 1px solid #dfe5ed; }
+#tab-guide .guide-protocol-conditions dt { font-weight: 700; color: #43556b; }
+#tab-guide .guide-protocol-conditions dd { margin: 0; overflow-wrap: anywhere; }
+#tab-guide .guide-protocol-example { color: #657486; font-size: 12px; margin-top: 10px; }
+@media(max-width: 480px){#tab-guide .guide-protocol-conditions > div { grid-template-columns: 1fr; gap: 2px; }}

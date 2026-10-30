@@ -1,0 +1,3 @@
+const assert=require('node:assert/strict'),p=require('./guide-protocols.js');
+for(const key of ['shrinkage','color_change']){const rows=Object.fromEntries(p[key].conditions);assert(rows['세탁 횟수'].includes('1회'));assert(rows['세탁 온도'].includes('30℃'));assert(rows['세탁 온도'].includes('양쪽 관리 표시'));assert(rows['사전 확인'].includes('불명확하면 시험하지'));assert(rows['건조'].includes('건조기를 사용하지 마세요'));assert(rows['세탁 방식과 시간'].includes('임의로 가져오지'));}
+const s=Object.fromEntries(p.staining.conditions);assert(s['방법'].includes('물세탁 횟수를 정하는 시험이 아니라'));assert(s['물 사용'].includes('물 온도는 임의로 정하지 않습니다'));console.log('PASS: explicit conditional 1-cycle/30°C example and no forced temperature for spot test');
