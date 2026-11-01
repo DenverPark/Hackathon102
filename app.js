@@ -462,7 +462,223 @@ function renderActions(actions){
   const order={danger:0,warning:1,info:2,success:3};
   const chips=[['danger','🚫 확인 필요'],['warning','⚠️ 주의'],['info','📋 판단 어려움'],['success','✅ 관찰 결과']].filter(([level])=>counts[level]).map(([level,label])=>`<span class="action-summary-chip ${level}">${label} ${counts[level]}</span>`).join('');
   const cards=[...actions].sort((a,b)=>order[a.level]-order[b.level]).map(a=>`<div class="rec-card rec-${escape(a.level)}"><div class="rec-icon">${escape(a.icon)}</div><div class="rec-body"><div class="rec-test-name">${escape(a.pair.join(' + '))} · ${escape(a.testName)}</div><div class="rec-title">${escape(a.title)}</div><div class="rec-desc">${escape(a.desc)}</div><div class="rec-input-val">입력 결과: ${escape(a.inputValue)} ${escape(a.inputUnit)}</div>${a.notes?`<div class="rec-desc">사용 조건·메모: ${escape(a.notes)}</div>`:''}</div></div>`).join('');
-  $('#action-content').innerHTML=`<div class="final-verdict"><div class="verdict-icon">📋</div><div class="verdict-title">시험 결과와 참고 조치</div><div class="verdict-desc">입력한 항목만 표시합니다. 가정용 관찰 결과이며 전체 원단이나 생산 가능 여부를 보증하지 않습니다. 수축률 차이의 2·5%포인트 구간은 main의 참고 기준이며 공인 합격 기준은 아닙니다.</div></div><div class="action-summary-bar">${chips}</div>${cards}<div class="action-bar" style="margin-top:24px;"><button class="btn btn-ghost" onclick="switchStep('guide')">← 테스트 수정</button><button class="btn btn-secondary" onclick="restartAll()">🔄 처음부터</button></div>`;
+  
+  const chatHtml = typeof renderActionChatBotHtml === 'function' ? renderActionChatBotHtml() : '';
+  
+  $('#action-content').innerHTML=`<div class="final-verdict"><div class="verdict-icon">📋</div><div class="verdict-title">시험 결과와 참고 조치</div><div class="verdict-desc">입력한 항목만 표시합니다. 가정용 관찰 결과이며 전체 원단이나 생산 가능 여부를 보증하지 않습니다. 수축률 차이의 2·5%포인트 구간은 main의 참고 기준이며 공인 합격 기준은 아닙니다.</div></div><div class="action-summary-bar">${chips}</div>${cards}${chatHtml}<div class="action-bar" style="margin-top:24px;"><button class="btn btn-ghost" onclick="switchStep('guide')">← 테스트 수정</button><button class="btn btn-secondary" onclick="restartAll()">🔄 처음부터</button></div>`;
+
+  if (typeof initActionChatBotEvents === 'function') {
+    initActionChatBotEvents(actions);
+  }
+}
+
+// ------------------------------------------------------------
+//  5단계: AI 맞춤 생산 조치 챗봇 연동 및 UI 컨트롤러
+// ------------------------------------------------------------
+let actionChatHistory = [];
+let isChatSubmitting = false;
+
+function renderActionChatBotHtml() {
+  return `
+    <div class="action-chat-section" id="action-chat-section">
+      <div class="chat-header">
+        <div class="chat-header-title">
+          <span>🧵 AI 원단 생산·봉제 컨설팅 챗봇</span>
+          <span class="chat-header-badge">GPT-4o Proxy</span>
+        </div>
+        <div class="chat-status-indicator">
+          <span class="status-dot"></span>
+          <span>컨텍스트 연동 완료</span>
+        </div>
+      </div>
+      
+      <div class="chat-messages" id="chat-messages">
+        <div class="chat-msg ai">
+          <div class="chat-avatar">🤖</div>
+          <div class="chat-bubble">
+            안녕하세요! 섬유 기술 수석 컨설턴트 AI입니다.
+            현재 선택하신 원단 조합, 호환성 분석, 그리고 4단계에서 입력하신 시험 측정 결과를 기반으로 생산 공정(바늘·봉제사·스티치 선정, 사전 방축 워싱, 이염 방지 고착제 처리, 패턴 여유분 설계 등)에 대한 맞춤형 조치를 즉시 안내해 드립니다.
+            궁금하신 사항을 아래 추천 질문을 누르거나 직접 질문해 보세요!
+          </div>
+        </div>
+      </div>
+
+      <div class="quick-prompts-area" id="quick-prompts-area">
+        <span class="quick-prompt-label">💡 추천 질문:</span>
+        <button type="button" class="quick-prompt-chip" data-prompt="선택한 원단 조합 봉제 시 권장 바늘 번호와 봉제사는?">🪡 권장 바늘 및 봉제사</button>
+        <button type="button" class="quick-prompt-chip" data-prompt="수축률 차이로 인한 퍼커링(주름)을 방지하는 패턴과 워싱 조치는?">📏 퍼커링 방지 패턴/워싱</button>
+        <button type="button" class="quick-prompt-chip" data-prompt="이염을 방지하기 위한 염료 고착제(Fixer) 후가공 및 취급 라벨 작성법은?">🎨 이염 방지 및 케어 라벨</button>
+        <button type="button" class="quick-prompt-chip" data-prompt="두 원단의 두께 및 신축성 차이를 극복하기 위한 재봉 팁은?">⚡ 두께 차이 봉제 팁</button>
+      </div>
+
+      <form class="chat-input-row" id="chat-form" onsubmit="return false;">
+        <input type="text" id="chat-input" placeholder="생산 공정, 봉제법, 세탁 가이드 등에 대해 질문하세요..." autocomplete="off">
+        <button type="submit" class="chat-send-btn" id="chat-send-btn">전송 🚀</button>
+      </form>
+    </div>
+  `;
+}
+
+function initActionChatBotEvents(actions) {
+  if (typeof document === 'undefined') return;
+
+  const form = document.getElementById('chat-form');
+  const input = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('chat-send-btn');
+  const chips = document.querySelectorAll('.quick-prompt-chip');
+
+  if (!form || !input || !sendBtn) return;
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const query = input.value.trim();
+    if (query && !isChatSubmitting) {
+      handleChatQuery(query, actions);
+      input.value = '';
+    }
+  });
+
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      const prompt = chip.getAttribute('data-prompt');
+      if (prompt && !isChatSubmitting) {
+        handleChatQuery(prompt, actions);
+      }
+    });
+  });
+}
+
+function formatMarkdown(text) {
+  if (!text) return '';
+  return text
+    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+    .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+    .replace(/^\s*-\s+(.*$)/gim, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>)/gims, '<ul>$1</ul>')
+    .replace(/\n\n/g, '<br><br>')
+    .replace(/\n/g, '<br>');
+}
+
+async function handleChatQuery(question, actions) {
+  const messagesContainer = document.getElementById('chat-messages');
+  const sendBtn = document.getElementById('chat-send-btn');
+  const input = document.getElementById('chat-input');
+  if (!messagesContainer) return;
+
+  isChatSubmitting = true;
+  if (sendBtn) sendBtn.disabled = true;
+  if (input) input.disabled = true;
+
+  // 1. 유저 메시지 버블 추가
+  const userMsgEl = document.createElement('div');
+  userMsgEl.className = 'chat-msg user';
+  userMsgEl.innerHTML = `
+    <div class="chat-avatar">👤</div>
+    <div class="chat-bubble">${escape(question)}</div>
+  `;
+  messagesContainer.appendChild(userMsgEl);
+
+  // 2. 타이핑 인디케이터 추가
+  const typingEl = document.createElement('div');
+  typingEl.className = 'chat-msg ai typing-row';
+  typingEl.innerHTML = `
+    <div class="chat-avatar">🤖</div>
+    <div class="chat-bubble">
+      <div class="typing-dots">
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+      </div>
+    </div>
+  `;
+  messagesContainer.appendChild(typingEl);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+  // 3. 백엔드 프록시 페이로드 구성
+  // 선택된 원단 목록
+  const selectedFabricsList = (typeof selected !== 'undefined' && typeof fabrics !== 'undefined')
+    ? Array.from(selected).map(id => fabrics.find(f => f.id === id)).filter(Boolean)
+    : [];
+
+  // 4단계 입력값 모음
+  const testResultsList = [];
+  if (typeof analysis !== 'undefined' && analysis && analysis.pairs) {
+    for (const pair of analysis.pairs) {
+      for (const prop of ['shrinkage', 'staining', 'color_change']) {
+        const inp = (typeof guideResultInputs !== 'undefined') ? guideResultInputs[`${pair.fabric_a_id}-${pair.fabric_b_id}-${prop}`] : null;
+        if (inp && inp.value) {
+          testResultsList.push({
+            pair: [pair.nameA, pair.nameB],
+            property: prop,
+            value: inp.value,
+            notes: inp.notes || ''
+          });
+        }
+      }
+    }
+  }
+
+  const payload = {
+    selectedFabrics: selectedFabricsList,
+    analysisResult: typeof analysis !== 'undefined' ? analysis : null,
+    testResults: testResultsList,
+    matchedRules: actions || [],
+    question: question,
+    history: actionChatHistory
+  };
+
+  try {
+    let reply = '';
+    if (typeof API !== 'undefined' && typeof API.askAiConsultant === 'function') {
+      const data = await API.askAiConsultant(payload);
+      reply = data.reply || '';
+    } else {
+      const res = await fetch('/api/chat/recommend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      reply = data.reply || '';
+    }
+
+    typingEl.remove();
+
+    // AI 응답 버블 추가
+    const aiMsgEl = document.createElement('div');
+    aiMsgEl.className = 'chat-msg ai';
+    aiMsgEl.innerHTML = `
+      <div class="chat-avatar">🤖</div>
+      <div class="chat-bubble">${formatMarkdown(reply)}</div>
+    `;
+    messagesContainer.appendChild(aiMsgEl);
+
+    // 대화 내역 누적
+    actionChatHistory.push({ role: 'user', content: question });
+    actionChatHistory.push({ role: 'assistant', content: reply });
+
+  } catch (err) {
+    console.error('Chat error:', err);
+    typingEl.remove();
+    const errorMsgEl = document.createElement('div');
+    errorMsgEl.className = 'chat-msg ai';
+    errorMsgEl.innerHTML = `
+      <div class="chat-avatar">⚠️</div>
+      <div class="chat-bubble">응답을 생성하는 중 오류가 발생했습니다: ${escape(err.message)}.<br>잠시 후 다시 시도해 주세요.</div>
+    `;
+    messagesContainer.appendChild(errorMsgEl);
+  } finally {
+    isChatSubmitting = false;
+    if (sendBtn) sendBtn.disabled = false;
+    if (input) {
+      input.disabled = false;
+      input.focus();
+    }
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
 }
 
 
