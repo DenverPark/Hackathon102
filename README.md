@@ -1,7 +1,7 @@
-팀원
-박병찬 - PM, UI / UX 프론트엔드 전반
-김예린 - Data Engineering, AI Integration, 프론트 / 백엔드 개발 보조
-박서준 - 백엔드 전반, Recommendation Engine
+
+박병찬 - PM, UI / UX 프론트엔드 전반. 
+김예린 - Data Engineering, AI Integration, 프론트 / 백엔드 개발 보조.
+박서준 - 백엔드 전반, Recommendation Engine.
 # 🧵 원단 조합 테스트 서비스
 
 원단을 선택하고 조합 적합성을 분석한 후, 테스트 가이드와 맞춤 조치를 추천받을 수 있는 웹 서비스입니다.
