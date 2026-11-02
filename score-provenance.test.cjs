@@ -1,0 +1,3 @@
+const vm=require('node:vm'),fs=require('node:fs'),assert=require('node:assert/strict');
+const src=fs.readFileSync('api.js','utf8');const ctx={window:{},console,structuredClone};vm.runInNewContext(src+';this.client=API;',ctx);
+(async()=>{const f=await ctx.client.getFabrics();assert(f.every(x=>x.data_origin==='local_example'));const r=await ctx.client.analyzeCompatibility([1,3,4]);assert.equal(r.avgScore,70);assert(r.pairs.every(x=>x.score_origin==='local_example'));const x=await ctx.client.getCompatibility(100,101);assert.equal(x.score,50);assert.equal(x.score_origin,'default');console.log('PASS: local fallback and default score are explicitly identified');})().catch(e=>{console.error(e);process.exit(1)});

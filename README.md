@@ -51,13 +51,22 @@ fabric-combo-test/
 └── README.md
 ```
 
-## 🗄️ DB 연동 가이드
+## 🗄️ Supabase PostgreSQL DB 연동 가이드
 
-`api.js`의 모든 함수는 `Promise`를 반환하여 백엔드 API로 교체가 용이합니다.
+`supabase_schema.sql`과 `supabase_seed.sql`을 통해 원단 6종(나일론, 울, 데님, 코튼 폴리에스터 블렌드, 면직물, 폴리에스터)의 특성·시험·출처 데이터를 관리합니다.
 
-### 테이블 설계
+- `supabase_schema.sql` : 테이블 생성 DDL, 외래키, 인덱스 및 RLS 공개 조회 정책
+- `supabase_seed.sql` : 원단 6종 상세 물성, 공인 시험(ISO/KS), 출처 및 호환성 매트릭스 데이터
 
-```sql
+### 주요 테이블 구조
+- `fabrics` : 원단 기본 마스터
+- `fabric_properties` : 정밀 물성 스펙 (1:1)
+- `fabric_tests` : 공인 시험 및 논문 실험 데이터 (1:N)
+- `fabric_sources` : 논문/표준 출처 (1:N)
+- `compatibility` : 원단 쌍별 호환성 매트릭스 (15개 조합)
+- `test_guides` : 4단계 테스트 가이드 마스터
+- `action_rules` : 5단계 맞춤 생산 조치 규칙
+
 -- 원단 마스터
 CREATE TABLE fabrics (
     id          INT PRIMARY KEY AUTO_INCREMENT,

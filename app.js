@@ -1,480 +1,716 @@
 // ============================================================
-//  app.js — UI 컨트롤러
-//  데이터는 모두 api.js (API 레이어)를 통해 접근
+//  app.js — UI 컨트롤러 (backend1 디자인 & 인터페이스 통합)
+//  백엔드 데이터 및 데이터베이스 내용은 변경 없이 100% 보존
 // ============================================================
 
-// === 상태 ===
-let fabricsCache = [];          // 원단 목록 캐시
-let selectedIds  = new Set();
-let compatResult = null;        // 호환성 분석 결과
-let testGuides   = [];          // 진행 테스트 가이드 목록
-let testInputs   = {};          // 사용자 테스트 결과 입력값
+const $ = selector => document.querySelector(selector);
+const $$ = selector => document.querySelectorAll(selector);
+const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-// === DOM ===
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => document.querySelectorAll(sel);
-
-const $fabricList      = $('#fabric-list');
-const $selectedList    = $('#selected-fabrics');
-const $selectedSummary = $('#selected-summary');
-const $btnTest         = $('#btn-test');
-const $floatingBar     = $('#floating-bar');
-const $selectedCount   = $('#selected-count');
-const $compatContent   = $('#compat-content');
-const $guideContent    = $('#guide-content');
-const $actionContent   = $('#action-content');
-
-// ============================================================
-//  스텝 전환
-// ============================================================
-const STEPS = ['select', 'review', 'compat', 'guide', 'action'];
+let fabrics = [], selected = new Set(), analysis = null, busy = false;
+const steps = ['select', 'review', 'compat', 'guide', 'action'];
 let currentStep = 'select';
+let washResult = {};
+let guideResultInputs = {};
+let projectPurpose = '';
 
-function switchStep(stepName) {
-  currentStep = stepName;
+// 원단 카드 설정 (UI 프리젠테이션)
+const selectionCards = [
+  { id: 1, key: 'nylon',      name: '나일론',               color: '#2C2C2E', desc: '가볍고 내구성이 뛰어난 합성 섬유',         tags: ['합성', '경량', '고강도'] },
+  { id: 2, key: 'wool',       name: '울',                   color: '#8E7C6A', desc: '보온성이 우수한 천연 동물성 섬유',         tags: ['천연', '보온', '중량'] },
+  { id: 3, key: 'denim',      name: '데님',                 color: '#2D4A7A', desc: '능직으로 짜인 내구성 높은 면직물',         tags: ['천연', '능직', '중량'] },
+  { id: 4, key: 'blend',      name: '코튼 폴리에스터 블렌드', color: '#B0C4B1', desc: '면과 폴리에스터를 혼방한 실용적 원단',     tags: ['혼방', '실용', '중량'] },
+  { id: 5, key: 'cotton',     name: '면직물',               color: '#E8D5B7', desc: '통기성과 흡습성이 좋은 천연 면 원단',      tags: ['천연', '통기성', '중량'] },
+  { id: 6, key: 'polyester',  name: '폴리에스터',            color: '#C8D8E4', desc: '구김이 적고 관리가 쉬운 합성 섬유',        tags: ['합성', '경량', '속건'] },
+];
 
-  // 패널 전환
-  $$('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${stepName}`));
+const testNames = { shrinkage: '수축률 비교', staining: '이염 확인', tensile: '인장/인열강도', pilling: '필링(보풀) 테스트' };
 
-  // 인디케이터 업데이트
-  const stepIdx = STEPS.indexOf(stepName);
-  $$('.step-indicator .step').forEach((el, i) => {
-    el.classList.remove('active', 'done');
-    if (i < stepIdx)  el.classList.add('done');
-    if (i === stepIdx) el.classList.add('active');
+// ============================================================
+//  스텝 네비게이션
+// ============================================================
+function updateSteps() {
+  const currentIndex = steps.indexOf(currentStep);
+  $$('.step').forEach((button, i) => {
+    button.classList.toggle('active', i === currentIndex);
+    button.classList.toggle('done', i < currentIndex);
+    button.disabled = busy || i > currentIndex;
+    if (i === currentIndex) button.setAttribute('aria-current', 'step');
+    else button.removeAttribute('aria-current');
   });
-
-  // 플로팅 바 — 원단 선택 탭에서만 표시
-  $floatingBar.classList.toggle('hidden', stepName !== 'select' || selectedIds.size === 0);
-
-  // 탭별 렌더 트리거
-  if (stepName === 'review') renderSelectedView();
 }
 
-// 인디케이터 클릭으로 이전 스텝 이동 (완료된 스텝만)
-$$('.step-indicator .step').forEach((el) => {
-  el.addEventListener('click', () => {
-    const target = el.dataset.step;
-    const targetIdx = STEPS.indexOf(target);
-    const curIdx = STEPS.indexOf(currentStep);
-    if (targetIdx <= curIdx) switchStep(target);
-  });
+function switchStep(step) {
+  if (busy || !steps.includes(step)) return;
+  if (['compat', 'guide', 'action'].includes(step) && !analysis && step !== 'select' && step !== 'review') return;
+  currentStep = step;
+  $$('.tab-panel').forEach(p => p.classList.toggle('active', p.id === `tab-${step}`));
+  updateSteps();
+  $('#floating-bar').classList.toggle('hidden', step !== 'select' || !selected.size);
+
+  if (step === 'review') renderReview();
+  if (step === 'compat') renderCompat();
+  if (step === 'guide' || step === 'action') renderHandoff(step);
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+window.switchStep = switchStep;
+
+$('#home-link').addEventListener('click', () => {
+  if (!busy) {
+    selected.clear();
+    invalidate();
+    projectPurpose = '';
+    switchStep('select');
+    renderFabrics();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 });
 
+$$('.step').forEach(el => el.addEventListener('click', () => {
+  const targetStep = el.dataset.step;
+  if (steps.indexOf(targetStep) <= steps.indexOf(currentStep)) {
+    switchStep(targetStep);
+  }
+}));
+
+function invalidate() {
+  analysis = null;
+  washResult = {};
+  guideResultInputs = {};
+}
 
 // ============================================================
-//  ① 원단 선택 렌더
+//  ① 1단계: 원단 선택 (backend1 카드 스타일)
 // ============================================================
-function renderFabricList() {
-  $fabricList.innerHTML = fabricsCache.map(f => {
-    const sel = selectedIds.has(f.id);
+function renderFabrics() {
+  $('#fabric-list').innerHTML = selectionCards.map(card => {
+    const fabric = fabrics.find(f => f.id === card.id);
+    const isSelected = selected.has(card.id);
     return `
-      <div class="fabric-card ${sel ? 'selected' : ''}" data-id="${f.id}">
-        <div class="check-icon">${sel ? '✓' : ''}</div>
-        <div class="color-swatch" style="background:${f.color}"></div>
-        <div class="fabric-name">${f.name}</div>
-        <div class="fabric-desc">${f.desc}</div>
-        <div class="fabric-meta">
-          ${f.tags.map(t => `<span class="tag">${t}</span>`).join('')}
-        </div>
-      </div>`;
+      <button type="button" class="fabric-card ${isSelected ? 'selected' : ''}" data-id="${card.id}" aria-pressed="${isSelected}">
+        <span class="check-icon">${isSelected ? '✓' : ''}</span>
+        <span class="color-swatch" style="background:${card.color}"></span>
+        <span class="fabric-name">${escape(card.name)}</span>
+        <span class="fabric-desc">${escape(card.desc)}</span>
+        <span class="fabric-meta">
+          ${card.tags.map(t => `<span class="tag">${escape(t)}</span>`).join('')}
+        </span>
+      </button>`;
   }).join('');
+
+  $('#selected-count').textContent = selected.size;
+  $('#floating-bar').classList.toggle('hidden', currentStep !== 'select' || !selected.size);
 }
 
-$fabricList.addEventListener('click', (e) => {
-  const card = e.target.closest('.fabric-card');
-  if (!card) return;
+$('#fabric-list').addEventListener('click', e => {
+  const card = e.target.closest('[data-id]');
+  if (!card || busy) return;
   const id = Number(card.dataset.id);
-  selectedIds.has(id) ? selectedIds.delete(id) : selectedIds.add(id);
-  renderFabricList();
-  renderSelectedView();
-  updateFloatingBar();
+  if (selected.has(id)) selected.delete(id);
+  else if (selected.size < 6) selected.add(id);
+  invalidate();
+  renderFabrics();
 });
 
-
 // ============================================================
-//  ② 선택 조회 렌더
+//  ② 2단계: 선택 조회 (backend1 sample-card 스타일)
 // ============================================================
-function renderSelectedView() {
-  const selected = fabricsCache.filter(f => selectedIds.has(f.id));
+function renderReview() {
+  const list = [...selected].map(id => fabrics.find(f => f.id === id)).filter(Boolean);
 
-  $selectedSummary.innerHTML = `
-    <div class="count">${selected.length}</div>
-    <div class="label">개 원단 선택됨</div>`;
+  $('#selected-summary').innerHTML = `
+    <div class="review-heading">
+      <div>
+        <span class="review-eyebrow">조합 준비</span>
+        <h2>선택한 원단을 확인하세요</h2>
+        <p>선택한 원단의 참고 정보와 연구 기록을 확인하세요.</p>
+      </div>
+      <span class="review-count">${list.length}<small>개 선택</small></span>
+    </div><div class="purpose-panel"><label for="project-purpose">제작 목적 <span class="field-required">선택</span></label><input id="project-purpose" type="text" maxlength="100" value="${escape(projectPurpose)}" placeholder="예: 헌 청바지와 바람막이로 가방 만들기"><p>제작 메모로 사용합니다. 현재 테스트 항목은 목적이 아닌 원단의 연구 기록을 기준으로 표시됩니다.</p></div>`;
+  $('#project-purpose').addEventListener('input', e=>{projectPurpose=e.target.value;});
 
-  if (selected.length === 0) {
-    $selectedList.innerHTML = `
-      <div class="empty-state">
-        <div class="icon">📋</div>
-        <p>선택된 원단이 없습니다<br><small>원단 선택 탭에서 원단을 선택해주세요</small></p>
+  if (list.length === 0) {
+    $('#selected-fabrics').innerHTML = `
+      <div class="review-empty">
+        <span aria-hidden="true">＋</span>
+        <h3>함께 확인할 원단을 골라주세요</h3>
+        <p>원단을 2개 이상 선택하면 조합을 분석할 수 있어요.</p>
+        <button class="btn btn-primary" onclick="switchStep('select')">원단 고르기</button>
       </div>`;
   } else {
-    $selectedList.innerHTML = selected.map(f => `
-      <div class="selected-item">
-        <div class="swatch" style="background:${f.color}"></div>
-        <div class="info">
-          <div class="name">${f.name}</div>
-          <div class="detail">${f.tags.join(' · ')}</div>
-        </div>
-        <button class="btn-remove" data-id="${f.id}" title="제거">✕</button>
-      </div>`).join('');
+    $('#selected-fabrics').innerHTML = list.map((f, index) => {
+      const card = selectionCards.find(c => c.id === f.id);
+      const p = f.properties || {};
+      const tests = f.tests || [];
+      const sources = f.sources || [];
+
+      return `
+        <article class="sample-card" data-id="${f.id}" aria-label="${escape(f.name)} 원단 정보">
+          <header class="review-card-header">
+            <span class="review-swatch" style="background:${card?.color || f.color_hex || '#bbb'}" aria-hidden="true"></span>
+            <div class="review-card-title">
+              <span class="review-sample-number">원단 ${index + 1}</span>
+              <h3>${escape(f.name)} <small>(${escape(f.aliases || f.category)})</small></h3>
+              <p>${escape(p.fiber_composition || f.category + ' 섬유')}</p>
+            </div>
+            <button class="review-remove" data-remove="${f.id}" aria-label="${escape(f.name)} 선택 해제">선택 해제</button>
+          </header>
+
+          <div class="review-material-tags">
+            <span>${escape(p.weave_type || '직조 정보')}</span>
+            <span>${escape(p.elasticity || '신축성')}</span>
+            ${p.gsm ? `<span>${escape(p.gsm)} GSM</span>` : (p.gsm_range_text ? `<span>${escape(p.gsm_range_text)}</span>` : '')}
+            ${p.shrinkage_avg_pct ? `<span>수축률 ${escape(p.shrinkage_avg_pct)}%</span>` : ''}
+          </div>
+
+          <p class="review-fabric-summary">${escape(f.description || f.desc)}</p>
+
+          <details class="review-research">
+            <summary>
+              <span>원단 정밀 물성 및 연구 출처</span>
+              <span class="review-disclosure-hint">DB 상세</span>
+            </summary>
+            <div class="review-research-body">
+              <p class="review-reference-note">${f.data_origin === 'database' ? 'DB에서 불러온 원단 정보입니다.' : 'DB 연결이 없는 경우 표시하는 임시 참고자료입니다.'} 개별 기록의 출처와 조건은 별도 확인이 필요합니다. 실제 원단의 실측값이나 관리 표시를 대신하지 않습니다. 조사자: ${escape(f.investigator || '미상')} (${escape(f.investigation_date || '')})</p>
+              ${p.care_guide ? `<p><strong>세탁 및 관리:</strong> ${escape(p.care_guide)}</p>` : ''}
+              ${p.shrinkage_detail ? `<p><strong>수축 특성:</strong> ${escape(p.shrinkage_detail)}</p>` : ''}
+              ${p.dye_transfer_detail ? `<p><strong>이염 특성:</strong> ${escape(p.dye_transfer_detail)}</p>` : ''}
+              ${p.other_characteristics ? `<p><strong>기타 특성:</strong> ${escape(p.other_characteristics)}</p>` : ''}
+
+              <h4>시험 및 조사 참고자료 (${tests.length}건)</h4>
+              <div class="modal-tests-list">
+                ${tests.map(t => `
+                  <div class="test-item-card">
+                    <div class="test-item-name">🔬 ${escape(t.name)}</div>
+                    <div class="test-item-cond"><strong>조건:</strong> ${escape(t.condition)}</div>
+                    <div class="test-item-res"><strong>결과:</strong> ${escape(t.result)}</div>
+                  </div>
+                `).join('')}
+              </div>
+
+              <h4>자료 출처</h4>
+              <ul class="review-source-list">
+                ${sources.map(s => `<li><a href="${escape(s.url)}" target="_blank" rel="noopener noreferrer">${escape(s.title)}</a></li>`).join('')}
+              </ul>
+            </div>
+          </details>
+        </article>`;
+    }).join('');
   }
 
-  $btnTest.disabled = selected.length < 2;
+  updateAnalyzeButton();
 }
 
-$selectedList.addEventListener('click', (e) => {
-  const btn = e.target.closest('.btn-remove');
-  if (!btn) return;
-  selectedIds.delete(Number(btn.dataset.id));
-  renderFabricList();
-  renderSelectedView();
-  updateFloatingBar();
-});
+function updateAnalyzeButton() {
+  const needsSelection = selected.size < 2 || selected.size > 6;
+  $('#btn-test').disabled = busy || needsSelection;
+  const helper = $('#review-next-hint');
+  if (helper) {
+    helper.textContent = needsSelection
+      ? '함께 확인할 원단을 2~6개 선택해주세요.'
+      : `${selected.size}개 원단의 조합 특성을 비교합니다.`;
+  }
+}
 
-$('#btn-clear') && document.addEventListener('click', (e) => {
-  if (e.target.id === 'btn-clear') {
-    selectedIds.clear();
-    renderFabricList(); renderSelectedView(); updateFloatingBar();
+$('#selected-fabrics').addEventListener('click', e => {
+  const remove = e.target.closest('[data-remove]');
+  if (remove) {
+    selected.delete(Number(remove.dataset.remove));
+    invalidate();
+    renderFabrics();
+    renderReview();
   }
 });
 
+$('#btn-test').addEventListener('click', analyze);
 
-// ============================================================
-//  ③ 호환성 분석 실행 + 렌더
-// ============================================================
-$btnTest.addEventListener('click', async () => {
-  switchStep('compat');
+async function analyze() {
+  if (busy || selected.size < 2 || selected.size > 6) return;
+  analysis = null;
+  currentStep = 'compat';
+  $$('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-compat'));
+  updateSteps();
+  $('#floating-bar').classList.add('hidden');
+  busy = true;
+  updateAnalyzeButton();
 
-  // 로딩
-  $compatContent.innerHTML = `
-    <div class="loading-state">
+  $('#compat-content').innerHTML = `
+    <div class="loading-state" role="status">
       <div class="spinner"></div>
-      <p>호환성 분석 중...</p>
+      <p>Supabase PostgreSQL 데이터베이스에서 원단 조합 분석 중...</p>
     </div>`;
 
-  // API 호출 (→ 추후 fetch로 교체)
-  compatResult = await API.analyzeCompatibility([...selectedIds]);
+  try {
+    analysis = await API.analyzeCompatibility([...selected]);
+    renderCompat();
+  } catch (error) {
+    $('#compat-content').innerHTML = `
+      <div class="empty-state" role="alert">
+        <p>분석에 실패했습니다. ${escape(error.message)}</p>
+        <button class="btn btn-primary" onclick="analyze()">다시 시도</button>
+      </div>`;
+  } finally {
+    busy = false;
+    updateSteps();
+    updateAnalyzeButton();
+  }
+}
 
-  // 필요 테스트 가이드도 함께 조회
-  testGuides = await API.getTestGuides(compatResult.pairs);
-  testInputs = {};
-
-  renderCompatResult();
-});
-
-function renderCompatResult() {
-  const { fabrics, pairs, avgScore } = compatResult;
-
-  let grade, gradeLabel;
-  if (avgScore >= 80)      { grade = '🟢'; gradeLabel = '우수'; }
-  else if (avgScore >= 60) { grade = '🟡'; gradeLabel = '보통'; }
-  else                     { grade = '🔴'; gradeLabel = '주의'; }
-
-  let h = '';
-
-  // 조합 칩
-  h += `<div class="combo-chips">`;
-  fabrics.forEach((f, i) => {
-    if (i > 0) h += `<span class="combo-plus">+</span>`;
-    h += `<span class="combo-chip"><span class="chip-dot" style="background:${f.color}"></span>${f.name}</span>`;
-  });
-  h += `</div>`;
-
-  // 헤더
-  h += `
-    <div class="result-header">
-      <div class="result-grade">${grade}</div>
-      <div class="result-title">조합 적합도: ${gradeLabel} (${avgScore}점)</div>
-      <div class="result-subtitle">${fabrics.length}종 원단 · ${pairs.length}개 조합 분석 완료</div>
-    </div>`;
-
-  // 점수 바
-  const cats = [
-    { label: '종합 점수', value: avgScore },
-    { label: '세탁 호환', value: clamp(avgScore + rand(-7,8)) },
-    { label: '내구성',    value: clamp(avgScore + rand(-5,10)) },
-    { label: '봉제 적합', value: clamp(avgScore + rand(-8,6)) },
+// ============================================================
+//  ③ 3단계: 호환성 분석 결과 (backend1 compat 디자인)
+// ============================================================
+function renderCompat() {
+  if (!analysis) return;
+  const snapshot=analysis;
+  const { fabrics: chosenFabrics, pairs, avgScore } = snapshot;
+  const numeric=typeof avgScore==='number' && Number.isFinite(avgScore)?avgScore:null;
+  const clamp=value=>Math.max(0,Math.min(100,value));
+  const metrics=[
+    {label:'종합 적합도',score:numeric,note:'원단 쌍별 등록 점수의 평균'},
+    {label:'세탁·수축 호환성',score:numeric===null?null:clamp(numeric-2),note:'임의 표시값 · 종합점수 − 2'},
+    {label:'내구성 및 봉제 적합',score:numeric===null?null:clamp(numeric+3),note:'임의 표시값 · 종합점수 + 3'},
+    {label:'이염 및 관리 호환',score:numeric===null?null:clamp(numeric-4),note:'임의 표시값 · 종합점수 − 4'}
   ];
-  h += `<div class="score-bar-container">`;
-  cats.forEach(c => {
-    const cls = c.value >= 70 ? 'high' : c.value >= 50 ? 'mid' : 'low';
-    h += `
-      <div class="score-row">
-        <span class="score-label">${c.label}</span>
-        <div class="score-track"><div class="score-fill ${cls}" style="width:${c.value}%"></div></div>
-        <span class="score-value">${c.value}</span>
-      </div>`;
-  });
-  h += `</div>`;
-
-  // 쌍별 상세
-  h += `<div class="pair-section"><div class="section-title">📊 원단 쌍별 호환성</div>`;
-  pairs.forEach(p => {
-    const badgeCls = p.level === 'good' ? 'good' : p.level === 'bad' ? 'bad' : 'caution';
-    const badgeTxt = p.level === 'good' ? '양호' : p.level === 'bad' ? '비추천' : '주의';
-    h += `
-      <div class="pair-card">
-        <div class="pair-names">
-          ${p.nameA} ↔ ${p.nameB}
-          <span class="compat-badge ${badgeCls}">${badgeTxt} ${p.score}점</span>
-        </div>
-        <div class="pair-detail">${p.detail}</div>
-      </div>`;
-  });
-  h += `</div>`;
-
-  // 다음 스텝 버튼
-  h += `
-    <div class="action-bar">
-      <button class="btn btn-ghost" onclick="switchStep('review')">← 선택 조회</button>
-      <button class="btn btn-primary" onclick="switchStep('guide')">테스트 가이드 →</button>
-    </div>`;
-
-  $compatContent.innerHTML = h;
+  const chip=f=>{const card=selectionCards.find(c=>c.id===f.id);return `<span class="result-fabric-chip"><i style="background:${card?.color||f.color||'#bbb'}"></i>${escape(f.name)}</span>`;};
+  const origin=p=>p.score_origin==='database'?'DB에 사전 등록된 점수':p.score_origin==='default'?'자료 없어 지정한 기본값':'화면에 포함된 임시 점수';
+  $('#compat-content').innerHTML=`<div class="compat-intro"><span class="review-eyebrow">제작 전 확인</span><h2>원단 조합을 살펴보세요</h2><p>${chosenFabrics.length}개 원단 · ${pairs.length}개 조합</p></div>
+  <div class="result-fabric-chips">${chosenFabrics.map(chip).join('<span class="result-plus">+</span>')}</div>
+  <section class="compat-hero"><div class="compat-score-ring" style="--score:${numeric===null?0:clamp(numeric)}"><div><strong>${numeric===null?'—':escape(numeric)}</strong><span>${numeric===null?'점수 보류':'/ 100점'}</span></div></div><div class="compat-hero-copy"><span class="compat-draft">기획용 임시 지표 · 검증 전</span><h3>조합별 등록 점수 평균</h3><p>두 원단씩 미리 정해진 점수의 평균입니다. 실제 선택 원단을 측정한 점수, 공인 시험 결과 또는 제작 성공 가능성이 아닙니다.</p><p>자료가 없으면 기본 점수 50이 포함될 수 있어요. 점수만으로 사용 가능 여부를 판단하지 마세요.</p></div></section>
+  <section class="compat-metrics"><div class="compat-section-heading"><h3>항목별 참고 점수</h3><span>기획용 · 검증 전</span></div>${metrics.map(m=>`<div class="compat-metric"><div class="compat-metric-label"><strong>${escape(m.label)}</strong><small>${escape(m.note)}</small></div>${m.score===null?'<div class="compat-track compat-track-pending" aria-label="평가 보류"></div>':`<div class="compat-track" role="progressbar" aria-label="${escape(m.label)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${m.score}"><span style="width:${m.score}%"></span></div>`}<span class="compat-metric-score">${m.score===null?'<span class="compat-pending">평가 보류</span>':`${escape(m.score)}<small>점</small>`}</span></div>`).join('')}<p class="compat-not-scored">세부 점수는 종합점수에서 숫자를 더하거나 뺀 임의 표시값입니다. 수축률·봉제강도·이염을 실제로 측정해 계산한 결과가 아닙니다.</p></section>
+  <section class="compat-pairs"><div class="compat-section-heading"><h3>원단 조합별 참고 정보</h3><span>${pairs.length}개 조합</span></div>${pairs.map(p=>`<article class="compat-pair"><div class="compat-pair-heading"><div><span>${escape(p.nameA)}</span><span class="pair-link">↔</span><span>${escape(p.nameB)}</span></div><strong>${escape(p.score)}<small>점</small></strong></div><p class="compat-pair-meta">${escape(origin(p))} · 검증되지 않은 기획값</p><p class="compat-pair-meta">소재와 가공 상태에 따른 실제 변화는 4단계의 DB 근거와 시편 확인이 필요합니다.</p></article>`).join('')}</section>
+  <section class="compat-tests"><div class="compat-section-heading"><h3>다음 단계에서 확인해요</h3><span>DB 연구 기록 기준</span></div><div class="compat-test-grid" data-compat-tests><div role="status"><p>추천 항목을 불러오고 있어요...</p></div></div></section>
+  <details class="compat-method"><summary>점수의 계산 방식과 한계</summary><div><p>선택한 원단을 두 개씩 짝지어 사전에 등록된 점수를 조회하고, 모든 조합 점수의 평균을 반올림합니다. 각 조합 점수의 검증된 환산 기준은 확인되지 않았습니다.</p><p>세탁·수축 항목은 종합 − 2, 봉제·내구 항목은 종합 + 3, 이염·관리 항목은 종합 − 4로 임의 표시하며 각 값은 0~100점으로 제한합니다. 항목별 시험 결과는 반영되지 않습니다.</p><p>3페이지 점수는 4페이지 연구 DB의 실제 수축률이나 이염 실험값을 계산한 것이 아니며 ISO·KS 공인 점수가 아닙니다. 가공·색상·관리 조건에 따라 실제 원단의 특성은 달라질 수 있습니다.</p></div></details>
+  <div class="review-actions compat-actions"><button class="review-back" onclick="switchStep('review')">← 선택 정보 확인</button><button class="btn btn-primary" onclick="switchStep('guide')">4단계 테스트 가이드 <span aria-hidden="true">→</span></button></div>`;
+  loadCompatTests(snapshot);
+}
+async function loadCompatTests(snapshot){
+  const container=$('#compat-content [data-compat-tests]');if(!container)return;
+  try{
+    const {byId}=await GuideEvidence.getSelected(snapshot.fabrics.map(f=>f.id));
+    if(analysis!==snapshot||currentStep!=='compat')return;
+    const found=new Set(snapshot.pairs.flatMap(pair=>GuideEvidence.recommendations([pair.fabric_a_id,pair.fabric_b_id],byId).map(item=>item.property)));
+    const cards=[['shrinkage','📏','수축률 비교','세탁 전후 각 원단의 길이 변화를 비교합니다.'],['staining','🎨','물 빠짐 확인','원단의 색이 흰 천에 묻어나는지 살펴봅니다.'],['color_change','🌈','색상 변화 확인','원단 자체의 세탁 전후 변화를 관찰합니다.']].filter(card=>found.has(card[0]));
+    container.innerHTML=cards.length?cards.map(([,icon,title,description])=>`<div><span aria-hidden="true">${icon}</span><strong>${escape(title)}</strong><p>${escape(description)}</p></div>`).join(''):'<div><p>선택한 원단에서 관련 연구 기록을 찾지 못했습니다.</p></div>';
+  }catch(error){
+    if(analysis!==snapshot||currentStep!=='compat')return;
+    container.innerHTML=`<div role="alert"><p>DB 연구 기록을 불러오지 못했습니다. ${escape(error.message)}</p><button type="button" class="btn btn-ghost" data-compat-retry>다시 시도</button></div>`;
+    container.querySelector('[data-compat-retry]').addEventListener('click',()=>loadCompatTests(snapshot));
+  }
 }
 
-
 // ============================================================
-//  ④ 테스트 가이드 + 결과 입력 렌더
+//  ④ 4단계: 테스트 가이드 & ⑤ 5단계: 조치 추천 (backend1 handoff 스타일)
 // ============================================================
-function renderGuide() {
-  let h = '';
+function renderHandoff(step) {
+  const target = step === 'guide' ? $('#guide-content') : $('#action-content');
+  if (!analysis) return;
 
-  h += `
-    <div class="guide-intro">
-      <h2>🧪 테스트 진행 가이드</h2>
-      <p>호환성 분석 결과에 따라 아래 ${testGuides.length}개 테스트를 진행하세요.<br>결과를 입력하면 맞춤 조치를 추천해드립니다.</p>
-    </div>`;
+  const names = analysis.fabrics.map(f => f.name);
 
-  testGuides.forEach((g, idx) => {
-    const curVal = testInputs[g.id] ?? '';
-    const hasVal = curVal !== '';
+  if (step === 'action') {
+    submitTests();
+    return;
+  }
 
-    h += `<div class="guide-card" data-test-id="${g.id}">`;
 
-    // 헤더
-    h += `
-      <div class="guide-header">
-        <span class="guide-icon">${g.icon}</span>
-        <span class="guide-title">${idx + 1}. ${g.name}</span>
-      </div>
-      <div class="guide-desc">${g.desc}</div>`;
+  renderEvidenceGuide(target);
 
-    // 방법
-    h += `
-      <div class="guide-method">
-        <div class="guide-method-label">시험 방법</div>
-        ${g.method}
-      </div>`;
+}
 
-    // 입력
-    h += `<div class="guide-input-group">`;
-    h += `<label>${g.inputLabel || g.name + ' 결과'}:</label>`;
+const guideConditionLabels={wash_temp_c:'세탁 온도 (℃)',wash_minutes:'세탁 시간 (분)',cycles:'세탁 횟수',detergent:'세제',drying:'건조 방식',drying_alternatives:'기록된 건조 방식',standards_reported:'기록된 시험 기준',environment:'측정 환경',points:'측정 지점 수',wash_conditions:'시험 조건',wash_temp_c_conflicting:'서로 다른 온도 기록 (℃)',verification_status:'자료 확인 상태',pages:'자료 페이지'};
+function guideValue(value){if(value===null||value===undefined)return '미기재';if(Array.isArray(value))return value.map(guideValue).join(' / ');if(typeof value==='object')return Object.entries(value).map(([k,v])=>`${k}: ${guideValue(v)}`).join(', ');return String(value);}
+const guideResultLabels={warp_pct:'경사 수축률 (%)',weft_pct:'위사 수축률 (%)',first_wash_warp_pct:'첫 세탁 경사 수축률 (%)','10_washes_warp_pct':'10회 세탁 경사 수축률 (%)','10_washes_weft_pct':'10회 세탁 위사 수축률 (%)',quantitative_value:'정량 수치',observation:'관찰 내용',nylon_grade:'나일론 첨부포 등급',acetate_grade:'아세테이트 첨부포 등급',cotton_grade:'면 첨부포 등급',wool_grade:'양모 첨부포 등급',first_wash_white_L_decrease_pct:'첫 세탁 백색 첨부포 명도 감소율 (%)'};
+function guideRecord(record,sources){
+  const source=sources.find(item=>item.id===record.source_id);
+  let url='';try{const u=new URL(source?.url);if(u.protocol==='https:'||u.protocol==='http:')url=u.href;}catch{}
+  const rows=Object.entries(record.conditions||{}).map(([key,value])=>`<li><strong>${escape(guideConditionLabels[key]||key)}:</strong> ${escape(key==='verification_status'?guideStatus(value):guideValue(value))}</li>`).join('');
+  const results=Object.entries(record.reported_value||{}).map(([key,value])=>`<li><strong>${escape(guideResultLabels[key]||key)}:</strong> ${escape(guideValue(value))}</li>`).join('');
+  return `<div class="guide-record"><p><strong>연구 시료:</strong> ${escape(record.sample_description||'미기재')}</p><p><strong>자료의 한계:</strong> ${escape(record.applicability||'확인 필요')}</p><details><summary>DB에 기록된 조건·결과·출처 보기</summary><p><strong>연구 조건</strong></p><ul>${rows||'<li>시험 조건 미기재</li>'}</ul><p><strong>연구 결과</strong> · 실제 선택 원단의 측정값 아님</p><ul>${results||'<li>결과 미기재</li>'}</ul><p><strong>출처:</strong> ${url?`<a href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(source.title)}</a>`:escape(source?.title||'출처 확인 필요')}</p><p>${escape(source?.limitations||'')}</p></details></div>`;
+}
+function guideStatus(status){
+  const labels={quantitative_source_unverified:'연구 수치의 원출처 연결 미확인',source_material_mismatch:'인용 출처와 원단이 맞지 않아 추가 확인 필요',primary_source_conflict:'원문과 조사자료 조건이 달라 추가 확인 필요',primary_protocol_verified:'원문 시험 조건 확인됨',provided_document:'제공된 조사자료 기록'};
+  return status ? (labels[status] || status) : '별도 검증 상태 미기재';
+}
+function guideStudyCondition(record,sources){
+  const c=record.conditions || {};
+  const read=value=>value===null||value===undefined||value===''?'미기재':guideValue(value);
+  const temperature=c.wash_temp_c_conflicting ? `서로 다른 기록: ${read(c.wash_temp_c_conflicting)} ℃` : (c.wash_temp_c===null||c.wash_temp_c===undefined ? '미기재' : `${read(c.wash_temp_c)} ℃`);
+  const minutes=c.wash_minutes===null||c.wash_minutes===undefined?'미기재':`${read(c.wash_minutes)} 분`;
+  const dry=c.drying ?? c.drying_alternatives;
+  const source=sources.find(item=>item.id===record.source_id);
+  let sourceUrl='';try{const u=new URL(source?.url);if(u.protocol==='https:'||u.protocol==='http:')sourceUrl=u.href;}catch{}
+  const detergent=c.detergent ?? (c.detergent_g===null||c.detergent_g===undefined?null:`${c.detergent_g} g (연구 시료)`);
+  const type=record.property==='felting_shrinkage'?'펠팅 수축 (일반 길이 수축과 구분)':record.property==='shrinkage'?'세탁 후 길이 변화':record.property==='staining'?'이염':'색상 변화';
+  return `<div class="guide-study"><p><strong>DB 기록:</strong> ${escape(type)}</p><p><strong>연구 시료:</strong> ${escape(record.sample_description||'미기재')}</p><dl><div><dt>세탁 온도</dt><dd>${escape(temperature)}</dd></div><div><dt>세탁 시간</dt><dd>${escape(minutes)}</dd></div><div><dt>건조 방법</dt><dd>${escape(read(dry))}</dd></div><div><dt>세탁 횟수</dt><dd>${escape(read(c.cycles))}</dd></div><div><dt>세제</dt><dd>${escape(read(detergent))}</dd></div><div><dt>시험 기준</dt><dd>${escape(read(c.standards_reported))}</dd></div></dl><p><strong>출처:</strong> ${sourceUrl?`<a href="${escape(sourceUrl)}" target="_blank" rel="noopener noreferrer">${escape(source.title)}</a>`:escape(source?.title||'출처 확인 필요')}</p><p><strong>검증 상태:</strong> ${escape(guideStatus(c.verification_status))}</p><p><strong>적용 제한:</strong> ${escape(record.applicability||'별도 제한 미기재')}</p></div>`;
+}
+function guideConditionDifferences(item){
+  const all=item.perFabric.flat();
+  const fields=[['세탁 온도',c=>c.wash_temp_c_conflicting ? null : c.wash_temp_c],['세탁 시간',c=>c.wash_minutes],['건조 방법',c=>c.drying ?? c.drying_alternatives],['세탁 횟수',c=>c.cycles],['세제',c=>c.detergent]];
+  const missing=[],different=[];
+  for(const [label,get] of fields){
+    const values=all.map(record=>get(record.conditions||{}));
+    if(item.perFabric.some(records=>!records.length)||values.some(value=>value===null||value===undefined||value===''))missing.push(label);
+    const known=values.filter(value=>value!==null&&value!==undefined&&value!=='');
+    if(new Set(known.map(value=>JSON.stringify(value))).size>1)different.push(label);
+  }
+  const lines=[];
+  if(different.length)lines.push(`${different.join('·')} 기록이 서로 다릅니다.`);
+  if(all.some(record=>record.conditions?.wash_temp_c_conflicting))lines.push('자료 안에서 세탁 온도 기록이 서로 충돌합니다.');
+  if(missing.length)lines.push(`${missing.join('·')} 정보가 일부 없거나 확인되지 않았습니다.`);
+  return lines.length?lines.join(' '):'기록이 존재해도 시료와 처리 조건이 같다는 뜻은 아닙니다.';
+}
+function guideComparedConditions(item,names,sources){
+  const columns=item.perFabric.map((records,i)=>`<section class="guide-compare-fabric"><h5>${escape(names[i])}</h5>${records.length?records.map(record=>guideStudyCondition(record,sources)).join(''):'<p>해당 항목의 DB 기록이 없어 시험 조건을 확인할 수 없어요.</p>'}</section>`).join('');
+  return `<div class="guide-method guide-comparison"><div class="guide-method-label">DB에 기록된 원단별 시험 조건</div><p>각 연구의 조건을 따로 보여드려요. 없는 시험 단계는 임의로 추가하지 않았습니다.</p><div class="guide-compare-grid">${columns}</div><p class="guide-compare-result"><strong>차이와 미확인:</strong> ${escape(guideConditionDifferences(item))}</p><p class="guide-compare-result">기록된 조건이 같거나 유사해 보여도 실제 원단의 공통 관리 방법이 확인된 것은 아닙니다. ‘미기재’는 안전하다는 뜻이 아닙니다.</p></div>`;
+}
+function historyPanel(){return `<details class="guide-history"><summary>저장한 테스트 기록 보기</summary><p>이 브라우저에만 저장됩니다. 브라우저 데이터를 삭제하거나 다른 기기를 사용하면 기록을 볼 수 없습니다. 현재 입력한 결과는 5페이지에서 확인할 수 있습니다.</p><div data-history-list></div></details>`;}
+function renderSavedHistory(target){
+  const list=target.querySelector('[data-history-list]');if(!list)return;
+  try{
+    const records=TestRecordStore.read(localStorage);
+    list.innerHTML=records.length?records.map(record=>`<article class="history-record"><div><strong>${escape(Array.isArray(record.pair)?record.pair.join(' + '):'원단 조합')}</strong><p>${escape(record.label || record.property)} · ${escape(record.value)}${record.property==='shrinkage'?' %포인트':''}</p>${record.purpose?`<p>제작 목적: ${escape(record.purpose)}</p>`:''}${record.notes?`<p>조건·메모: ${escape(record.notes)}</p>`:''}<small>${escape(new Date(record.createdAt).toLocaleString('ko-KR'))}</small></div><button type="button" class="btn btn-ghost" data-record-delete="${escape(record.id)}" aria-label="${escape(record.label || '테스트')} 기록 삭제">삭제</button></article>`).join(''):'<p>저장한 기록이 없습니다.</p>';
+    list.querySelectorAll('[data-record-delete]').forEach(button=>button.addEventListener('click',()=>{try{const removedId=button.dataset.recordDelete;TestRecordStore.remove(localStorage,removedId);for(const [key,input] of Object.entries(guideResultInputs)){if(input.recordId===removedId){delete input.recordId;target.querySelectorAll('[data-save-status]').forEach(status=>{if(status.dataset.saveStatus===key)status.textContent='기록이 삭제되었습니다. 결과를 다시 입력하면 저장됩니다.';});}}renderSavedHistory(target);}catch(error){list.insertAdjacentText('beforeend',` 기록을 삭제하지 못했습니다: ${error.message}`);}}));
+  }catch(error){list.textContent=`기록을 불러오지 못했습니다: ${error.message}`;}
+}
+async function renderEvidenceGuide(target){
+  const snapshot=analysis;const ids=snapshot.fabrics.map(f=>f.id);
+  target.innerHTML='<div class="guide-intro"><h2>🧪 조합별 테스트 확인</h2><p role="status">원단별 연구 DB를 확인하고 있어요...</p></div>';
+  try{
+    const {byId,sources}=await GuideEvidence.getSelected(ids);
+    if(snapshot!==analysis||currentStep!=='guide')return;
+    const name=id=>snapshot.fabrics.find(f=>f.id===id)?.name||String(id);
+    let savedRecords=new Map();try{savedRecords=new Map(TestRecordStore.read(localStorage).map(record=>[record.id,record]));}catch{}
+    const pairs=snapshot.pairs.map((pair,pairIndex)=>{
+      const pairIds=[pair.fabric_a_id,pair.fabric_b_id];const items=GuideEvidence.recommendations(pairIds,byId);
+      const cards=items.map((item,index)=>{
+        const records=pairIds.map((id,i)=>`<section class="guide-fabric-record"><h5>${escape(name(id))}</h5>${item.perFabric[i].length?item.perFabric[i].map(record=>guideRecord(record,sources)).join(''):'<p>이 항목의 DB 연구 기록이 없어요.</p>'}</section>`).join('');
+        const why=pairIds.map((id,i)=>{const found=item.perFabric[i];if(!found.length)return `${escape(name(id))}: 관련 연구 기록이 없어요.`;const kinds=[...new Set(found.map(record=>record.property==='felting_shrinkage'?'펠팅 수축':item.label))];return `${escape(name(id))}: ${kinds.map(escape).join('·')} 관련 연구 기록 ${found.length}건`;}).join('<br>');
+        const protocol=GuideProtocols[item.property];
+        if(!protocol)return '';
+        const resultKey=pairIds.join('-')+'-'+item.property;
+        const entered=guideResultInputs[resultKey] || {};
+        const persisted=entered.recordId?savedRecords.get(entered.recordId):null;
+        const isSaved=!!persisted && String(persisted.value??'')===String(entered.value??'') && String(persisted.notes??'')===String(entered.notes??'') && String(persisted.purpose??'')===projectPurpose.trim();
+        const observations=item.property==='staining'?[['관찰됨','흰 천에 색이 묻음'],['관찰되지 않음','흰 천에 색이 묻지 않음'],['판단 어려움','판단하기 어려움']]:[['관찰됨','색이나 표면 변화가 보임'],['관찰되지 않음','색이나 표면 변화가 보이지 않음'],['판단 어려움','판단하기 어려움']];
+        const input=protocol.inputType==='number'?`<input type="number" min="0" step="any" inputmode="decimal" data-guide-result="${escape(resultKey)}" value="${escape(entered.value??'')}" placeholder="예: 3">`:`<select data-guide-result="${escape(resultKey)}"><option value="">선택하세요</option>${observations.map(([v,label])=>`<option value="${escape(v)}" ${entered.value===v?'selected':''}>${escape(label)}</option>`).join('')}</select>`;
+        return `<article class="guide-card guide-test" data-pair-index="${pairIndex}" data-property="${escape(item.property)}"><div class="guide-header"><span class="guide-icon" aria-hidden="true">${protocol.icon}</span><div><span class="guide-badge">DB 기록 기반 추천 · 참고 관찰</span><h4 class="guide-title">${index+1}. ${escape(item.label)}</h4></div></div><p class="guide-desc">${escape(protocol.summary)}</p><div class="guide-why"><strong>추천 이유 · 원단별 DB 기록</strong><p>${why}</p><p>DB 기록은 연구 시료의 결과이며 실제 원단에 그대로 적용하지 않습니다.</p></div><div class="guide-method"><div class="guide-method-label">준비물</div><p>${escape(protocol.supplies)}</p><div class="guide-method-label guide-step-title">세부 조건 · 관리 표시 확인 후</div><dl class="guide-protocol-conditions">${protocol.conditions.map(([label,value])=>`<div><dt>${escape(label)}</dt><dd>${escape(value)}</dd></div>`).join('')}</dl><p class="guide-protocol-example">이 조건은 서비스에서 정한 가정용 참고 조건입니다. 두 원단에 허용되는 경우에만 사용하며 DB 연구 조건이나 공인 시험을 그대로 재현한 것은 아닙니다.</p><div class="guide-method-label guide-step-title">진행 순서</div><ol>${protocol.steps.map(step=>`<li>${escape(step)}</li>`).join('')}</ol></div><p class="guide-caution">${escape(protocol.note)}</p><p class="guide-method-source">진행 순서는 DB 원문이 아닌 서비스에서 새로 작성한 가정용 참고 안내입니다. <a href="${escape(protocol.source)}" target="_blank" rel="noopener noreferrer">방법 참고자료: ${escape(protocol.sourceLabel)}</a></p><div class="guide-input-group guide-result-input"><label>${escape(protocol.inputLabel)}<span class="guide-result-control">${input}</span></label><label for="notes-${escape(resultKey)}">사용한 조건과 관찰 메모 <span>(온도·횟수·세탁·건조 방식 등)</span></label><textarea id="notes-${escape(resultKey)}" data-guide-notes="${escape(resultKey)}" rows="2" maxlength="1000" placeholder="온도, 세제, 횟수, 건조 방식 등">${escape(entered.notes??'')}</textarea><p class="guide-input-status" role="status" aria-live="polite" data-save-status="${escape(resultKey)}">${isSaved?'✓ 기록 완료':(String(entered.value??'').trim()?'기록되지 않은 변경사항이 있습니다':'결과를 입력해 주세요')}</p><small>결과를 입력하면 이 브라우저에 자동 저장되고 5페이지에 전달됩니다.</small></div><details class="guide-evidence"><summary>원단별 DB 연구 조건과 출처 보기</summary>${guideComparedConditions(item,pairIds.map(name),sources)}<p>각 기록의 결과는 연구 시료의 결과이며 실제 선택 원단의 측정값이 아닙니다.</p>${records}</details></article>`;
+      }).join('');
+      return `<details class="guide-pair" ${pairIndex===0?'open':''}><summary><span>원단 조합 ${pairIndex+1}</span><strong>${pairIds.map(id=>escape(name(id))).join(' + ')}</strong><small>${items.length}개 확인 항목</small></summary><p class="guide-pair-desc">선택한 원단에 관련 DB 연구 기록이 있는 항목을 조합별로 추천해요. 수축률은 두 원단을 한 카드에서 비교합니다.</p>${cards||'<div class="guide-card"><p>선택한 원단에서 관련 DB 연구 기록을 찾지 못했습니다. 기록되지 않은 시험은 표시하지 않습니다.</p></div>'}</details>`;
+    }).join('');
+    target.innerHTML=`<div class="guide-intro"><h2>🧪 원단 조합별 테스트 가이드</h2><p>선택한 원단의 DB 연구 기록이 있는 항목을 조합별로 추천합니다. 같은 종류의 시험은 원단 두 장을 하나의 카드에서 확인해요.</p><p>진행 순서는 서비스가 새로 작성한 가정용 참고 안내입니다. DB 연구 절차나 공인 시험과 다르며 실제 원단의 관리 표시와 공통 세탁·건조 방법을 먼저 확인하세요.</p></div>${historyPanel()}${pairs}<div class="action-bar"><button type="button" class="btn btn-ghost" data-guide-back>← 호환성 결과</button><button type="button" class="btn btn-primary" data-guide-next>5단계 조치 확인 →</button></div>`;
+    renderSavedHistory(target);
+    target.querySelectorAll('[data-guide-result],[data-guide-notes]').forEach(field=>{
+      const update=()=>{
+        const isResult=field.hasAttribute('data-guide-result');const key=isResult?field.dataset.guideResult:field.dataset.guideNotes;
+        const current={...(guideResultInputs[key]||{}),[isResult?'value':'notes']:field.value};guideResultInputs[key]=current;
+        const card=field.closest('.guide-test');const status=card.querySelector('[data-save-status]');
+        if(!String(current.value??'').trim()){status.textContent=current.recordId?'결과를 입력해 주세요. 이전 저장값은 기록 목록에 유지됩니다.':'결과를 입력해 주세요';return;}
+        try{
+          const pair=snapshot.pairs[Number(card.dataset.pairIndex)];const property=card.dataset.property;const protocol=GuideProtocols[property];
+          if(!pair||!protocol)throw new Error('원단 조합을 확인할 수 없습니다.');
+          const saved=TestRecordStore.save(localStorage,{pair:[pair.nameA,pair.nameB],property,label:protocol.inputLabel,value:String(current.value),notes:String(current.notes??''),purpose:projectPurpose.trim()},current.recordId);
+          guideResultInputs[key]={...current,recordId:saved.id};status.textContent='✓ 기록 완료';renderSavedHistory(target);
+        }catch(error){status.textContent=`저장하지 못했습니다: ${error.message}`;}
+      };
+      field.addEventListener('input',update);
+    });
+    target.querySelector('[data-guide-back]').addEventListener('click',()=>switchStep('compat'));
+    target.querySelector('[data-guide-next]').addEventListener('click',()=>switchStep('action'));
+  }catch(error){if(snapshot!==analysis||currentStep!=='guide')return;target.innerHTML=`<div class="guide-intro" role="alert"><h2>시험 자료를 불러오지 못했어요</h2><p>${escape(error.message)}. 임의의 테스트를 대신 표시하지 않습니다.</p>${historyPanel()}<button class="btn btn-primary" data-guide-retry>다시 시도</button> <button class="btn btn-ghost" data-guide-back>← 호환성 결과</button> <button class="btn btn-primary" data-guide-next>5단계 조치 확인 →</button></div>`;renderSavedHistory(target);target.querySelector('[data-guide-retry]').addEventListener('click',()=>renderEvidenceGuide(target));target.querySelector('[data-guide-back]').addEventListener('click',()=>switchStep('compat'));target.querySelector('[data-guide-next]').addEventListener('click',()=>switchStep('action'));}
+}
 
-    if (g.inputType === 'number') {
-      h += `<input type="number" step="any" class="test-input" data-test-id="${g.id}" value="${curVal}" placeholder="측정값 입력" />`;
-      if (g.unit) h += `<span class="input-unit">${g.unit}</span>`;
-    } else if (g.inputType === 'select') {
-      h += `<select class="test-input" data-test-id="${g.id}">`;
-      h += `<option value="">선택하세요</option>`;
-      g.inputOptions.forEach(o => {
-        h += `<option value="${o.value}" ${curVal == o.value ? 'selected' : ''}>${o.label}</option>`;
-      });
-      h += `</select>`;
+// 현재 선택한 조합에서 입력한 결과만 조치 화면에 전달합니다.
+async function submitTests(){
+  const target=$('#action-content');
+  const results=[];
+  for(const pair of analysis.pairs){
+    for(const property of ['shrinkage','staining','color_change']){
+      const input=guideResultInputs[`${pair.fabric_a_id}-${pair.fabric_b_id}-${property}`];
+      const value=String(input?.value ?? '').trim();
+      if(!value)continue;
+      if(property==='shrinkage'&&(!Number.isFinite(Number(value))||Number(value)<0))continue;
+      if(property!=='shrinkage'&&!['관찰됨','관찰되지 않음','판단 어려움'].includes(value))continue;
+      results.push({pair:[pair.nameA,pair.nameB],property,value,notes:input.notes || ''});
     }
-    h += `</div>`;
-
-    // 입력 상태
-    h += `<div class="guide-input-status ${hasVal ? 'valid' : 'empty'}">
-            ${hasVal ? '✓ 입력 완료' : '결과를 입력해주세요'}
-          </div>`;
-
-    h += `</div>`;
-  });
-
-  // 입력 카운트 + 제출 버튼
-  const filledCount = testGuides.filter(g => testInputs[g.id] !== undefined && testInputs[g.id] !== '').length;
-  const allFilled = filledCount === testGuides.length;
-
-  h += `
-    <div style="text-align:center; margin: 16px 0 8px; font-size:13px; color:#6e6e73;">
-      ${filledCount} / ${testGuides.length}개 테스트 결과 입력됨
-    </div>
-    <div class="action-bar">
-      <button class="btn btn-ghost" onclick="switchStep('compat')">← 호환성 결과</button>
-      <button class="btn btn-primary" id="btn-submit-tests" ${allFilled ? '' : 'disabled'}>
-        📋 조치 추천 받기
-      </button>
-    </div>`;
-
-  $guideContent.innerHTML = h;
-
-  // 이벤트 바인딩: 입력 변경
-  $$('.test-input').forEach(el => {
-    el.addEventListener('input', onTestInput);
-    el.addEventListener('change', onTestInput);
-  });
-
-  // 이벤트 바인딩: 제출
-  const btnSubmit = $('#btn-submit-tests');
-  if (btnSubmit) btnSubmit.addEventListener('click', submitTests);
-}
-
-function onTestInput(e) {
-  const testId = e.target.dataset.testId;
-  testInputs[testId] = e.target.value;
-  renderGuide(); // 상태 갱신 (입력값 유지됨)
-}
-
-// 가이드 탭이 활성화될 때 렌더
-const origSwitch = switchStep;
-// switchStep을 확장
-const _switchStep = switchStep;
-
-
-// ============================================================
-//  ⑤ 테스트 결과 제출 → 조치 추천
-// ============================================================
-async function submitTests() {
-  switchStep('action');
-
-  $actionContent.innerHTML = `
-    <div class="loading-state">
-      <div class="spinner"></div>
-      <p>테스트 결과를 분석하고 조치를 생성 중...</p>
-    </div>`;
-
-  // 입력값 정리
-  const results = testGuides
-    .filter(g => testInputs[g.id] !== undefined && testInputs[g.id] !== '')
-    .map(g => ({ testId: g.id, value: testInputs[g.id] }));
-
-  // API: 결과 저장
-  const sessionId = `session_${Date.now()}`;
-  await API.saveTestResults(sessionId, results);
-
-  // API: 조치 추천 조회
-  const actions = await API.getActionRecommendations(results);
-
+  }
+  if(!results.length){renderActionPending(target);return;}
+  const actions=[];
+  for(const result of results){
+    let action;
+    if(result.property==='shrinkage'){
+      const [reference]=await MainActions.getActionRecommendations([{testId:'shrinkage',value:Number(result.value)}]);
+      if(!reference)continue;
+      const messages={success:'측정한 시편의 수축률 차이가 2%포인트 이하입니다. 실제 사용할 원단과 제작물에서도 확인하세요.',warning:'측정한 시편의 수축률 차이가 2%포인트를 초과하고 5%포인트 이하입니다. 원단에 허용되는 사전 세탁과 재측정을 고려하세요.',danger:'측정한 시편의 수축률 차이가 5%포인트를 초과합니다. 원단 조합과 관리 방법을 재검토하고 다시 확인하세요.'};
+      action={...reference,desc:messages[reference.level],inputValue:result.value,inputUnit:'%포인트'};
+    }else{
+      const isChange=result.property==='color_change';
+      const observed=result.value==='관찰됨', uncertain=result.value==='판단 어려움';
+      action={testName:isChange?'세탁 전후 색·표면 변화':'이염 확인',level:uncertain?'info':observed?'warning':'success',icon:uncertain?'📋':observed?'⚠️':'✅',title:uncertain?'추가 확인 필요':observed?(isChange?'색·표면 변화 관찰됨':'흰 천에 색이 묻음'):(isChange?'색·표면 변화가 관찰되지 않음':'흰 천에 색이 묻지 않음'),desc:uncertain?'같은 조건에서 다시 확인하거나 전문가에게 문의하세요.':observed?(isChange?'관리 표시와 세탁 방법을 확인하고 실제 조합 시편으로 추가 확인하세요.':'단독 세탁 등 관리 방법을 확인하고 실제 원단 조합의 이염을 추가 확인하세요.'):'이번 간이 관찰에서 확인되지 않았으며, 다른 세탁·마찰 조건에서도 변화가 없다는 뜻은 아닙니다.',inputValue:result.value,inputUnit:''};
+    }
+    actions.push({...action,pair:result.pair,notes:result.notes});
+  }
   renderActions(actions);
 }
+window.submitTests=submitTests;
+function renderActionPending(target){
+  target.innerHTML=`<div class="final-verdict"><div class="verdict-icon">📋</div><div class="verdict-title">입력된 시험 결과가 없어요</div><div class="verdict-desc">4페이지에서 시험 결과를 입력하면 이곳에서 조합별 결과와 참고 조치를 확인할 수 있어요.</div></div><div class="action-bar" style="margin-top:24px;"><button class="btn btn-ghost" onclick="switchStep('guide')">← 테스트 입력</button><button class="btn btn-secondary" onclick="restartAll()">🔄 처음부터</button></div>`;
+}
+function renderActions(actions){
+  const counts={success:0,warning:0,danger:0,info:0};
+  actions.forEach(a=>counts[a.level]++);
+  const order={danger:0,warning:1,info:2,success:3};
+  const chips=[['danger','🚫 확인 필요'],['warning','⚠️ 주의'],['info','📋 판단 어려움'],['success','✅ 관찰 결과']].filter(([level])=>counts[level]).map(([level,label])=>`<span class="action-summary-chip ${level}">${label} ${counts[level]}</span>`).join('');
+  const cards=[...actions].sort((a,b)=>order[a.level]-order[b.level]).map(a=>`<div class="rec-card rec-${escape(a.level)}"><div class="rec-icon">${escape(a.icon)}</div><div class="rec-body"><div class="rec-test-name">${escape(a.pair.join(' + '))} · ${escape(a.testName)}</div><div class="rec-title">${escape(a.title)}</div><div class="rec-desc">${escape(a.desc)}</div><div class="rec-input-val">입력 결과: ${escape(a.inputValue)} ${escape(a.inputUnit)}</div>${a.notes?`<div class="rec-desc">사용 조건·메모: ${escape(a.notes)}</div>`:''}</div></div>`).join('');
+  
+  const chatHtml = typeof renderActionChatBotHtml === 'function' ? renderActionChatBotHtml() : '';
+  
+  $('#action-content').innerHTML=`<div class="final-verdict"><div class="verdict-icon">📋</div><div class="verdict-title">시험 결과와 참고 조치</div><div class="verdict-desc">입력한 항목만 표시합니다. 가정용 관찰 결과이며 전체 원단이나 생산 가능 여부를 보증하지 않습니다. 수축률 차이의 2·5%포인트 구간은 main의 참고 기준이며 공인 합격 기준은 아닙니다.</div></div><div class="action-summary-bar">${chips}</div>${cards}${chatHtml}<div class="action-bar" style="margin-top:24px;"><button class="btn btn-ghost" onclick="switchStep('guide')">← 테스트 수정</button><button class="btn btn-secondary" onclick="restartAll()">🔄 처음부터</button></div>`;
 
-function renderActions(actions) {
-  let h = '';
-
-  // 요약 카운트
-  const successCount = actions.filter(a => a.level === 'success').length;
-  const warningCount = actions.filter(a => a.level === 'warning').length;
-  const dangerCount  = actions.filter(a => a.level === 'danger').length;
-
-  // 최종 판정
-  let verdictIcon, verdictTitle, verdictDesc;
-  if (dangerCount === 0 && warningCount === 0) {
-    verdictIcon  = '🎉';
-    verdictTitle = '모든 테스트 통과!';
-    verdictDesc  = '선택하신 원단 조합은 모든 테스트 항목에서 양호한 결과를 보였습니다. 생산 진행이 가능합니다.';
-  } else if (dangerCount === 0) {
-    verdictIcon  = '⚠️';
-    verdictTitle = '조건부 생산 가능';
-    verdictDesc  = '일부 항목에서 주의가 필요합니다. 아래 권장 조치를 적용한 후 생산을 진행하세요.';
-  } else {
-    verdictIcon  = '🚫';
-    verdictTitle = '생산 전 조치 필수';
-    verdictDesc  = '중요한 문제가 발견되었습니다. 아래 필수 조치 사항을 반드시 이행한 후 재테스트하세요.';
+  if (typeof initActionChatBotEvents === 'function') {
+    initActionChatBotEvents(actions);
   }
+}
 
-  h += `
-    <div class="final-verdict">
-      <div class="verdict-icon">${verdictIcon}</div>
-      <div class="verdict-title">${verdictTitle}</div>
-      <div class="verdict-desc">${verdictDesc}</div>
-    </div>`;
+// ------------------------------------------------------------
+//  5단계: AI 맞춤 생산 조치 챗봇 연동 및 UI 컨트롤러
+// ------------------------------------------------------------
+let actionChatHistory = [];
+let isChatSubmitting = false;
 
-  // 요약 칩
-  h += `<div class="action-summary-bar">`;
-  if (successCount) h += `<span class="action-summary-chip success">✅ 양호 ${successCount}</span>`;
-  if (warningCount) h += `<span class="action-summary-chip warning">⚠️ 주의 ${warningCount}</span>`;
-  if (dangerCount)  h += `<span class="action-summary-chip danger">🚫 위험 ${dangerCount}</span>`;
-  h += `</div>`;
-
-  // 위험 → 주의 → 양호 순 정렬
-  const order = { danger: 0, warning: 1, success: 2 };
-  const sorted = [...actions].sort((a, b) => (order[a.level] ?? 9) - (order[b.level] ?? 9));
-
-  // 조치 카드
-  sorted.forEach(a => {
-    h += `
-      <div class="rec-card rec-${a.level}">
-        <div class="rec-icon">${a.icon}</div>
-        <div class="rec-body">
-          <div class="rec-test-name">${a.testName}</div>
-          <div class="rec-title">${a.title}</div>
-          <div class="rec-desc">${a.desc}</div>
-          <div class="rec-input-val">측정값: ${a.inputValue} ${a.inputUnit}</div>
+function renderActionChatBotHtml() {
+  return `
+    <div class="action-chat-section" id="action-chat-section">
+      <div class="chat-header">
+        <div class="chat-header-title">
+          <span>🧵 AI 원단 생산·봉제 컨설팅 챗봇</span>
+          <span class="chat-header-badge">GPT-4o Proxy</span>
         </div>
-      </div>`;
+        <div class="chat-status-indicator">
+          <span class="status-dot"></span>
+          <span>컨텍스트 연동 완료</span>
+        </div>
+      </div>
+      
+      <div class="chat-messages" id="chat-messages">
+        <div class="chat-msg ai">
+          <div class="chat-avatar">🤖</div>
+          <div class="chat-bubble">
+            안녕하세요! 섬유 기술 수석 컨설턴트 AI입니다.
+            현재 선택하신 원단 조합, 호환성 분석, 그리고 4단계에서 입력하신 시험 측정 결과를 기반으로 생산 공정(바늘·봉제사·스티치 선정, 사전 방축 워싱, 이염 방지 고착제 처리, 패턴 여유분 설계 등)에 대한 맞춤형 조치를 즉시 안내해 드립니다.
+            궁금하신 사항을 아래 추천 질문을 누르거나 직접 질문해 보세요!
+          </div>
+        </div>
+      </div>
+
+      <div class="quick-prompts-area" id="quick-prompts-area">
+        <span class="quick-prompt-label">💡 추천 질문:</span>
+        <button type="button" class="quick-prompt-chip" data-prompt="선택한 원단 조합 봉제 시 권장 바늘 번호와 봉제사는?">🪡 권장 바늘 및 봉제사</button>
+        <button type="button" class="quick-prompt-chip" data-prompt="수축률 차이로 인한 퍼커링(주름)을 방지하는 패턴과 워싱 조치는?">📏 퍼커링 방지 패턴/워싱</button>
+        <button type="button" class="quick-prompt-chip" data-prompt="이염을 방지하기 위한 염료 고착제(Fixer) 후가공 및 취급 라벨 작성법은?">🎨 이염 방지 및 케어 라벨</button>
+        <button type="button" class="quick-prompt-chip" data-prompt="두 원단의 두께 및 신축성 차이를 극복하기 위한 재봉 팁은?">⚡ 두께 차이 봉제 팁</button>
+      </div>
+
+      <form class="chat-input-row" id="chat-form" onsubmit="return false;">
+        <input type="text" id="chat-input" placeholder="생산 공정, 봉제법, 세탁 가이드 등에 대해 질문하세요..." autocomplete="off">
+        <button type="submit" class="chat-send-btn" id="chat-send-btn">전송 🚀</button>
+      </form>
+    </div>
+  `;
+}
+
+function initActionChatBotEvents(actions) {
+  if (typeof document === 'undefined') return;
+
+  const form = document.getElementById('chat-form');
+  const input = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('chat-send-btn');
+  const chips = document.querySelectorAll('.quick-prompt-chip');
+
+  if (!form || !input || !sendBtn) return;
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const query = input.value.trim();
+    if (query && !isChatSubmitting) {
+      handleChatQuery(query, actions);
+      input.value = '';
+    }
   });
 
-  // 하단 액션
-  h += `
-    <div class="action-bar" style="margin-top:24px;">
-      <button class="btn btn-ghost" onclick="switchStep('guide')">← 테스트 수정</button>
-      <button class="btn btn-secondary" onclick="restartAll()">🔄 처음부터</button>
-    </div>`;
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      const prompt = chip.getAttribute('data-prompt');
+      if (prompt && !isChatSubmitting) {
+        handleChatQuery(prompt, actions);
+      }
+    });
+  });
+}
 
-  $actionContent.innerHTML = h;
+function formatMarkdown(text) {
+  if (!text) return '';
+  return text
+    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+    .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+    .replace(/^\s*-\s+(.*$)/gim, '<li>$1</li>')
+    .replace(/(<li>.*<\/li>)/gims, '<ul>$1</ul>')
+    .replace(/\n\n/g, '<br><br>')
+    .replace(/\n/g, '<br>');
+}
+
+async function handleChatQuery(question, actions) {
+  const messagesContainer = document.getElementById('chat-messages');
+  const sendBtn = document.getElementById('chat-send-btn');
+  const input = document.getElementById('chat-input');
+  if (!messagesContainer) return;
+
+  isChatSubmitting = true;
+  if (sendBtn) sendBtn.disabled = true;
+  if (input) input.disabled = true;
+
+  // 1. 유저 메시지 버블 추가
+  const userMsgEl = document.createElement('div');
+  userMsgEl.className = 'chat-msg user';
+  userMsgEl.innerHTML = `
+    <div class="chat-avatar">👤</div>
+    <div class="chat-bubble">${escape(question)}</div>
+  `;
+  messagesContainer.appendChild(userMsgEl);
+
+  // 2. 타이핑 인디케이터 추가
+  const typingEl = document.createElement('div');
+  typingEl.className = 'chat-msg ai typing-row';
+  typingEl.innerHTML = `
+    <div class="chat-avatar">🤖</div>
+    <div class="chat-bubble">
+      <div class="typing-dots">
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+      </div>
+    </div>
+  `;
+  messagesContainer.appendChild(typingEl);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+  // 3. 백엔드 프록시 페이로드 구성
+  // 선택된 원단 목록
+  const selectedFabricsList = (typeof selected !== 'undefined' && typeof fabrics !== 'undefined')
+    ? Array.from(selected).map(id => fabrics.find(f => f.id === id)).filter(Boolean)
+    : [];
+
+  // 4단계 입력값 모음
+  const testResultsList = [];
+  if (typeof analysis !== 'undefined' && analysis && analysis.pairs) {
+    for (const pair of analysis.pairs) {
+      for (const prop of ['shrinkage', 'staining', 'color_change']) {
+        const inp = (typeof guideResultInputs !== 'undefined') ? guideResultInputs[`${pair.fabric_a_id}-${pair.fabric_b_id}-${prop}`] : null;
+        if (inp && inp.value) {
+          testResultsList.push({
+            pair: [pair.nameA, pair.nameB],
+            property: prop,
+            value: inp.value,
+            notes: inp.notes || ''
+          });
+        }
+      }
+    }
+  }
+
+  const payload = {
+    selectedFabrics: selectedFabricsList,
+    analysisResult: typeof analysis !== 'undefined' ? analysis : null,
+    testResults: testResultsList,
+    matchedRules: actions || [],
+    question: question,
+    history: actionChatHistory
+  };
+
+  try {
+    let reply = '';
+    if (typeof API !== 'undefined' && typeof API.askAiConsultant === 'function') {
+      const data = await API.askAiConsultant(payload);
+      reply = data.reply || '';
+    } else {
+      const res = await fetch('/api/chat/recommend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      reply = data.reply || '';
+    }
+
+    typingEl.remove();
+
+    // AI 응답 버블 추가
+    const aiMsgEl = document.createElement('div');
+    aiMsgEl.className = 'chat-msg ai';
+    aiMsgEl.innerHTML = `
+      <div class="chat-avatar">🤖</div>
+      <div class="chat-bubble">${formatMarkdown(reply)}</div>
+    `;
+    messagesContainer.appendChild(aiMsgEl);
+
+    // 대화 내역 누적
+    actionChatHistory.push({ role: 'user', content: question });
+    actionChatHistory.push({ role: 'assistant', content: reply });
+
+  } catch (err) {
+    console.error('Chat error:', err);
+    typingEl.remove();
+    const errorMsgEl = document.createElement('div');
+    errorMsgEl.className = 'chat-msg ai';
+    errorMsgEl.innerHTML = `
+      <div class="chat-avatar">⚠️</div>
+      <div class="chat-bubble">응답을 생성하는 중 오류가 발생했습니다: ${escape(err.message)}.<br>잠시 후 다시 시도해 주세요.</div>
+    `;
+    messagesContainer.appendChild(errorMsgEl);
+  } finally {
+    isChatSubmitting = false;
+    if (sendBtn) sendBtn.disabled = false;
+    if (input) {
+      input.disabled = false;
+      input.focus();
+    }
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  }
 }
 
 
-// ============================================================
-//  유틸
-// ============================================================
-function updateFloatingBar() {
-  $selectedCount.textContent = selectedIds.size;
-  $floatingBar.classList.toggle('hidden', selectedIds.size === 0 || currentStep !== 'select');
-}
 
 function restartAll() {
-  selectedIds.clear();
-  compatResult = null;
-  testGuides = [];
-  testInputs = {};
-  renderFabricList();
-  renderSelectedView();
-  updateFloatingBar();
+  selected.clear();
+  invalidate();
+  projectPurpose = '';
   switchStep('select');
+  renderFabrics();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
+window.restartAll = restartAll;
 
-function clamp(v) { return Math.max(0, Math.min(100, Math.round(v))); }
-function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
-
-
-// ============================================================
-//  switchStep 오버라이드 — guide 탭 진입 시 렌더
-// ============================================================
-const _origSwitchStep = switchStep;
-// 이미 정의된 switchStep을 래핑 — guide 진입 시 renderGuide 호출
-const __origSS = window.switchStep || switchStep;
-
-// switchStep을 재정의하지 않고 MutationObserver로 대응
-// 대신, 탭 전환 시 guide를 렌더하는 로직을 switchStep에 직접 포함
-// → switchStep은 이미 전역이므로 아래처럼 재할당
-
-(function patchSwitchStep() {
-  const original = switchStep;
-  window.switchStep = function(stepName) {
-    original(stepName);
-    if (stepName === 'guide') renderGuide();
-  };
-})();
 
 
 // ============================================================
 //  초기화
 // ============================================================
-(async function init() {
-  fabricsCache = await API.getFabrics();
-  renderFabricList();
-  renderSelectedView();
-})();
+async function init() {
+  updateSteps();
+  $('#fabric-list').innerHTML = '<div class="loading-state"><div class="spinner"></div><p>원단 카탈로그 조회 중...</p></div>';
+  try {
+    fabrics = await API.getFabrics();
+    renderFabrics();
+  } catch (error) {
+    $('#fabric-list').innerHTML = `
+      <div class="empty-state">
+        <p>원단 목록 로드에 실패했습니다: ${escape(error.message)}</p>
+        <button class="btn btn-primary" onclick="init()">다시 시도</button>
+      </div>`;
+  }
+}
+
+init();

@@ -4,28 +4,29 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>원단 조합 테스트 서비스</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=guide11">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div id="app">
     <!-- 헤더 -->
     <header class="header">
-      <h1>🧵 원단 조합 테스트</h1>
+      <h1><button type="button" class="home-link" id="home-link" aria-label="원단 조합 테스트 첫 페이지로 이동">🧵 원단 조합 테스트</button></h1>
       <p class="subtitle">보유 원단을 선택하고 조합 적합성을 확인하세요</p>
     </header>
 
     <!-- 스텝 인디케이터 -->
-    <div class="step-indicator" id="step-indicator">
-      <div class="step active" data-step="select"><span class="step-num">1</span><span class="step-label">원단 선택</span></div>
+    <nav class="step-indicator" id="step-indicator" aria-label="진행 단계">
+      <button type="button" class="step active" data-step="select" aria-label="원단 선택" aria-current="step"><span class="step-num">1</span><span class="step-label">원단 선택</span></button>
       <div class="step-line"></div>
-      <div class="step" data-step="review"><span class="step-num">2</span><span class="step-label">선택 조회</span></div>
+      <button type="button" class="step" data-step="review" aria-label="선택 조회" disabled><span class="step-num">2</span><span class="step-label">선택 조회</span></button>
       <div class="step-line"></div>
-      <div class="step" data-step="compat"><span class="step-num">3</span><span class="step-label">호환성 결과</span></div>
+      <button type="button" class="step" data-step="compat" aria-label="호환성 결과" disabled><span class="step-num">3</span><span class="step-label">호환성 결과</span></button>
       <div class="step-line"></div>
-      <div class="step" data-step="guide"><span class="step-num">4</span><span class="step-label">테스트 가이드</span></div>
+      <button type="button" class="step" data-step="guide" aria-label="테스트 가이드" disabled><span class="step-num">4</span><span class="step-label">테스트 가이드</span></button>
       <div class="step-line"></div>
-      <div class="step" data-step="action"><span class="step-num">5</span><span class="step-label">조치 추천</span></div>
-    </div>
+      <button type="button" class="step" data-step="action" aria-label="조치 추천" disabled><span class="step-num">5</span><span class="step-label">조치 추천</span></button>
+    </nav>
 
     <!-- ① 원단 선택 -->
     <section id="tab-select" class="tab-panel active">
@@ -36,10 +37,14 @@
     <section id="tab-review" class="tab-panel">
       <div id="selected-summary" class="selected-summary"></div>
       <div id="selected-fabrics" class="selected-list"></div>
-      <div class="action-bar">
-        <button class="btn btn-ghost" onclick="switchStep('select')">← 돌아가기</button>
-        <button id="btn-test" class="btn btn-primary" disabled>🔬 호환성 분석</button>
-      </div>
+      <footer class="review-actions">
+        <button class="review-back" onclick="switchStep('select')">← 원단 다시 고르기</button>
+        <div class="review-next">
+          <p id="review-next-hint" aria-live="polite"></p>
+          <button id="btn-test" class="btn btn-primary" disabled>조합 분석하기 <span aria-hidden="true">→</span></button>
+        </div>
+      </footer>
+      <p class="review-footnote">원단 참고자료와 연구 기록을 확인합니다. 실제 원단의 품질 검증을 대신하지 않습니다.</p>
     </section>
 
     <!-- ③ 호환성 결과 -->
@@ -62,9 +67,28 @@
       <span id="selected-count">0</span>개 선택됨
       <button class="btn btn-small" onclick="switchStep('review')">조회 →</button>
     </div>
+
+    <!-- 원단 상세 정보 모달 -->
+    <div id="fabric-modal" class="modal hidden">
+      <div class="modal-backdrop" onclick="closeFabricModal()"></div>
+      <div class="modal-card">
+        <div class="modal-header">
+          <div id="modal-title-area">
+            <h3 id="modal-title">원단 상세 정보</h3>
+            <span id="modal-badge" class="badge"></span>
+          </div>
+          <button class="btn-close" onclick="closeFabricModal()">✕</button>
+        </div>
+        <div id="modal-body" class="modal-body"></div>
+      </div>
+    </div>
   </div>
 
-  <script src="api.js"></script>
-  <script src="app.js"></script>
+  <script src="api.js?v=guide10"></script>
+  <script src="guide-evidence.js?v=4"></script>
+  <script src="guide-protocols.js?v=3"></script>
+  <script src="main-actions.js?v=1"></script>
+  <script src="test-records.js?v=2"></script>
+  <script src="app.js?v=guide16"></script>
 </body>
 </html>
