@@ -154,10 +154,11 @@ CREATE TABLE action_rules (
     min_value NUMERIC(10,2),
     max_value NUMERIC(10,2),
     select_value VARCHAR(50),
-    level VARCHAR(20) NOT NULL CHECK (level IN ('success', 'warning', 'danger')),
+    level VARCHAR(20) NOT NULL CHECK (level IN ('success', 'warning', 'danger', 'info')),
     icon VARCHAR(10) NOT NULL,
     title VARCHAR(200) NOT NULL,
-    description TEXT NOT NULL
+    description TEXT NOT NULL,
+    action_detail JSONB DEFAULT '{}'
 );
 
 -- ------------------------------------------------------------

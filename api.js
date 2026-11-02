@@ -584,6 +584,25 @@ const API = (() => {
     return { success: true, sessionId };
   }
 
+  /** AI 컨설턴트 챗봇 프록시 질의 */
+  async function askAiConsultant(payload) {
+    try {
+      const res = await fetch('/api/chat/recommend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `서버 오류 (${res.status})`);
+      }
+      return await res.json();
+    } catch (e) {
+      console.error('[API.askAiConsultant] Error:', e);
+      throw e;
+    }
+  }
+
   return {
     getFabrics,
     getFabricDetail,
@@ -593,6 +612,7 @@ const API = (() => {
     getTestGuides,
     getActionRecommendations,
     saveTestResults,
+    askAiConsultant,
   };
 
 })();
